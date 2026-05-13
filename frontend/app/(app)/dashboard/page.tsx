@@ -4,14 +4,10 @@ import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
-  AlertTriangle,
   BookOpen,
   CheckCircle,
   ClipboardList,
-  Factory,
   Layers,
-  Package,
-  ShoppingCart,
   TrendingDown,
   TrendingUp,
   Users2,
@@ -34,9 +30,6 @@ import type {
   CourseRead,
   Grade,
   GradeWithCourses,
-  ProductionBatch,
-  SalesOrder,
-  StockAlert,
   StudentUnitContent,
 } from '@/lib/types'
 
@@ -272,216 +265,18 @@ function ConnStatsSection({ title }: { title: string }) {
 }
 
 function AdminPanel() {
-  const [stats, setStats] = useState({
-    pendingOrders: 0,
-    activeBatches: 0,
-    criticalStock: 0,
-    activeCourses: 0,
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const [orders, batches, alerts] = await Promise.all([
-        api.get<SalesOrder[]>('/commercial/orders'),
-        api.get<ProductionBatch[]>('/production/batches'),
-        api.get<StockAlert[]>('/inventory/alerts'),
-      ])
-      setStats({
-        pendingOrders: orders.filter((o) => o.status === 'PENDING').length,
-        activeBatches: batches.filter((b) =>
-          ['PENDING', 'IN_PROGRESS'].includes(b.status),
-        ).length,
-        criticalStock: alerts.filter((a) => a.status_color === 'RED').length,
-        activeCourses: 0,
-      })
-    } catch (err: any) {
-      setError(err?.detail ?? 'Error al cargar el dashboard.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  if (loading) return <SkeletonCards count={4} />
-  if (error) return <ErrorBanner message={error} onRetry={load} />
-
-  return (
-    <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Pedidos Pendientes"
-          value={stats.pendingOrders}
-          subtitle="Órdenes por aprobar"
-          icon={ShoppingCart}
-          gradient="bg-gradient-to-br from-blue-500 to-blue-700"
-        />
-        <StatCard
-          title="Lotes Activos"
-          value={stats.activeBatches}
-          subtitle="En producción"
-          icon={Package}
-          gradient="bg-gradient-to-br from-orange-500 to-orange-700"
-        />
-        <StatCard
-          title="Stock Crítico"
-          value={stats.criticalStock}
-          subtitle="Productos sin unidades FREE"
-          icon={AlertTriangle}
-          gradient="bg-gradient-to-br from-green-500 to-green-700"
-          href="/inventory?color=RED"
-        />
-        <StatCard
-          title="Cursos Activos"
-          value={stats.activeCourses}
-          subtitle="Cursos en el sistema"
-          icon={BookOpen}
-          gradient="bg-gradient-to-br from-purple-500 to-purple-700"
-        />
-      </div>
-      <ConnStatsSection title="Actividad de conexiones" />
-    </div>
-  )
+  return <ConnStatsSection title="Actividad de conexiones" />
 }
 
 function OperativoPanel() {
-  const [stats, setStats] = useState({
-    activeBatches: 0,
-    criticalStock: 0,
-    fulfillmentOrders: 0,
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const [batches, alerts, orders] = await Promise.all([
-        api.get<ProductionBatch[]>('/production/batches'),
-        api.get<StockAlert[]>('/inventory/alerts'),
-        api.get<SalesOrder[]>('/commercial/orders'),
-      ])
-      setStats({
-        activeBatches: batches.filter((b) =>
-          ['PENDING', 'IN_PROGRESS'].includes(b.status),
-        ).length,
-        criticalStock: alerts.filter((a) => a.status_color === 'RED').length,
-        fulfillmentOrders: orders.filter(
-          (o) => o.fulfillment_status === 'PACKING',
-        ).length,
-      })
-    } catch (err: any) {
-      setError(err?.detail ?? 'Error al cargar el dashboard.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  if (loading) return <SkeletonCards count={3} />
-  if (error) return <ErrorBanner message={error} onRetry={load} />
-
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      <StatCard
-        title="Lotes Activos"
-        value={stats.activeBatches}
-        subtitle="En producción"
-        icon={Factory}
-        gradient="bg-gradient-to-br from-orange-500 to-orange-700"
-        href="/production"
-      />
-      <StatCard
-        title="Stock Crítico"
-        value={stats.criticalStock}
-        subtitle="Productos sin unidades FREE"
-        icon={AlertTriangle}
-        gradient="bg-gradient-to-br from-green-500 to-green-700"
-        href="/inventory?color=RED"
-      />
-      <StatCard
-        title="En Fulfillment"
-        value={stats.fulfillmentOrders}
-        subtitle="Órdenes en packing"
-        icon={Package}
-        gradient="bg-gradient-to-br from-cyan-500 to-cyan-700"
-        href="/fulfillment"
-      />
-    </div>
+    <p className="text-muted-foreground text-sm">Próximamente.</p>
   )
 }
 
 function ComercialPanel() {
-  const [stats, setStats] = useState({
-    pendingOrders: 0,
-    approvedOrders: 0,
-    todaySales: 0,
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const orders = await api.get<SalesOrder[]>('/commercial/orders')
-      const today = new Date().toISOString().slice(0, 10)
-      setStats({
-        pendingOrders: orders.filter((o) => o.status === 'PENDING').length,
-        approvedOrders: orders.filter((o) => o.status === 'APPROVED').length,
-        todaySales: orders.filter(
-          (o) => o.created_at.slice(0, 10) === today,
-        ).length,
-      })
-    } catch (err: any) {
-      setError(err?.detail ?? 'Error al cargar el dashboard.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  if (loading) return <SkeletonCards count={3} />
-  if (error) return <ErrorBanner message={error} onRetry={load} />
-
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      <StatCard
-        title="Órdenes Pendientes"
-        value={stats.pendingOrders}
-        subtitle="Por aprobar"
-        icon={ShoppingCart}
-        gradient="bg-gradient-to-br from-blue-500 to-blue-700"
-        href="/orders"
-      />
-      <StatCard
-        title="Órdenes Aprobadas"
-        value={stats.approvedOrders}
-        subtitle="Listas para producción"
-        icon={TrendingUp}
-        gradient="bg-gradient-to-br from-emerald-500 to-emerald-700"
-      />
-      <StatCard
-        title="Ventas Hoy"
-        value={stats.todaySales}
-        subtitle="Órdenes creadas hoy"
-        icon={ShoppingCart}
-        gradient="bg-gradient-to-br from-indigo-500 to-indigo-700"
-      />
-    </div>
+    <p className="text-muted-foreground text-sm">Próximamente.</p>
   )
 }
 

@@ -17,7 +17,6 @@ import {
   LayoutDashboard,
   LogOut,
   Moon,
-  Package,
   Plug,
   Shield,
   Sun,
@@ -92,7 +91,6 @@ export function Nav() {
       title: 'Próximamente',
       items: [
         { href: '#', label: 'Administrativo', icon: GraduationCap, soon: true, disabled: true },
-        { href: '#', label: 'Inventario',     icon: Package,       soon: true, disabled: true },
         { href: '#', label: 'Integraciones',  icon: Plug,          soon: true, disabled: true },
       ],
     },

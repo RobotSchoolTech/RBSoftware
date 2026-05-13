@@ -14,11 +14,41 @@ from app.domains.auth.repositories import UserRepository
 from app.domains.auth.routes.auth import _set_auth_cookies
 from app.domains.auth.services.refresh_token_service import RefreshTokenService
 from app.domains.rbac.repositories import UserRoleRepository
+from app.domains.rbac.repositories import RoleRepository
+from app.domains.rbac.schemas import UserRoleCreate
 
 router = APIRouter(prefix="/auth/sso", tags=["auth"])
 
 _audit = AuditService()
 _jwks_cache: dict | None = None
+
+# Mapeo de grupos Authentik → roles internos del LMS
+_GROUP_TO_ROLE: dict[str, str] = {
+    "admin":            "ADMIN",
+    "authentik Admins": "ADMIN",
+    "director":         "DIRECTOR",
+    "trainer":          "TRAINER",
+    "teacher":          "TEACHER",
+    "student":          "STUDENT",
+}
+
+
+def _sync_roles_from_groups(
+    session: Session,
+    user_id: int,
+    groups: list[str],
+    user_role_repo: UserRoleRepository,
+    role_repo: RoleRepository,
+) -> list[str]:
+    """Agrega al usuario los roles LMS que correspondan a sus grupos de Authentik.
+    No elimina roles existentes (comportamiento seguro durante la transición)."""
+    target = {_GROUP_TO_ROLE[g] for g in groups if g in _GROUP_TO_ROLE}
+    current = set(user_role_repo.get_role_names_for_user(user_id))
+    for role_name in target - current:
+        role = role_repo.get_by_name(role_name)
+        if role:
+            user_role_repo.create(UserRoleCreate(user_id=user_id, role_id=role.id))
+    return list(current | target)
 
 
 async def _get_jwks() -> dict:
@@ -99,9 +129,14 @@ async def sso_login(
             detail="Usuario no encontrado en el LMS",
         )
 
+    groups: list[str] = claims.get("groups", [])
+    user_role_repo = UserRoleRepository(session)
+    role_names = _sync_roles_from_groups(
+        session, user.id, groups, user_role_repo, RoleRepository(session)
+    )
+
     raw_refresh, _ = RefreshTokenService().create_token(session, user.id)
     access_token = create_access_token({"sub": str(user.public_id)})
-    role_names = UserRoleRepository(session).get_role_names_for_user(user.id)
     _set_auth_cookies(response, access_token, raw_refresh, role_names)
 
     _audit.log(

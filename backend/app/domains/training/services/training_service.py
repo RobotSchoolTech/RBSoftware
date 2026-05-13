@@ -308,7 +308,12 @@ class TrainingService:
             raise ValueError("Se requieren exactamente 4 opciones")
         if data.correct_option not in (0, 1, 2, 3):
             raise ValueError("correct_option debe estar entre 0 y 3")
-        return QuizQuestionRepository(session).create(evaluation.id, data)
+        question = QuizQuestionRepository(session).create(evaluation.id, data)
+        questions = QuizQuestionRepository(session).list_by_evaluation(evaluation.id)
+        evaluation.max_score = sum(q.points for q in questions)
+        session.add(evaluation)
+        session.commit()
+        return question
 
     # ── Enrollments ──────────────────────────────────────────────────────────
 
@@ -411,11 +416,13 @@ class TrainingService:
         if not questions:
             raise ValueError("La evaluación no tiene preguntas")
 
+        total_points = sum(q.points for q in questions)
         score = sum(
             q.points
             for q in questions
             if answers.get(str(q.public_id)) == q.correct_option
         )
+        passing_threshold = round(evaluation.passing_score * total_points / 100) if total_points > 0 else evaluation.passing_score
 
         now = datetime.now(timezone.utc)
         submission_repo = SubmissionRepository(session)
@@ -425,7 +432,7 @@ class TrainingService:
             if existing.status == TrainingSubmissionStatus.GRADED:
                 if (
                     existing.score is not None
-                    and existing.score >= evaluation.passing_score
+                    and existing.score >= passing_threshold
                 ):
                     raise ValueError("Esta evaluación ya fue aprobada")
                 if existing.attempts_used >= evaluation.max_attempts:
@@ -581,6 +588,7 @@ class TrainingService:
         evaluations_passed = 0
         scores: list[int] = []
         sub_repo = SubmissionRepository(session)
+        quiz_q_repo = QuizQuestionRepository(session)
         for ev in all_evaluations:
             sub = sub_repo.get_by_user_and_evaluation(
                 enrollment.user_id, ev.id
@@ -588,7 +596,12 @@ class TrainingService:
             if sub and sub.status == TrainingSubmissionStatus.GRADED:
                 if sub.score is not None:
                     scores.append(sub.score)
-                    if sub.score >= ev.passing_score:
+                    if ev.type == "QUIZ":
+                        total_pts = sum(q.points for q in quiz_q_repo.list_by_evaluation(ev.id))
+                        threshold = round(ev.passing_score * total_pts / 100) if total_pts > 0 else ev.passing_score
+                    else:
+                        threshold = ev.passing_score
+                    if sub.score >= threshold:
                         evaluations_passed += 1
 
         average_score = round(sum(scores) / len(scores), 1) if scores else 0.0
@@ -793,12 +806,18 @@ class TrainingService:
             passed_evaluations = 0
             scores: list[int] = []
             sub_repo = SubmissionRepository(session)
+            quiz_q_repo = QuizQuestionRepository(session)
             for ev in all_evals:
                 sub = sub_repo.get_by_user_and_evaluation(user_id, ev.id)
                 if sub and sub.status == TrainingSubmissionStatus.GRADED:
                     if sub.score is not None:
                         scores.append(sub.score)
-                        if sub.score >= ev.passing_score:
+                        if ev.type == "QUIZ":
+                            total_pts = sum(q.points for q in quiz_q_repo.list_by_evaluation(ev.id))
+                            threshold = round(ev.passing_score * total_pts / 100) if total_pts > 0 else ev.passing_score
+                        else:
+                            threshold = ev.passing_score
+                        if sub.score >= threshold:
                             passed_evaluations += 1
 
             overall_score = round(sum(scores) / len(scores), 1) if scores else None

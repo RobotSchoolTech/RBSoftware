@@ -170,7 +170,8 @@ export function TeacherProgramView({ program, modules }: Props) {
     const allEvalsCleared = !prevEvalData || prevEvalData.evaluations.every((ev) => {
       const sub = submissionMap.get(ev.public_id)
       if (sub?.status !== 'GRADED') return false
-      const passed = (sub.score ?? 0) >= ev.passing_score
+      const threshold = Math.round(ev.passing_score * ev.max_score / 100)
+      const passed = (sub.score ?? 0) >= threshold
       const exhausted = sub.attempts_used >= ev.max_attempts
       return passed || exhausted
     })
@@ -706,7 +707,7 @@ function EvaluationCard({ evaluation, onSubmissionUpdate }: { evaluation: Traini
   }
 
   const isGraded = submission?.status === 'GRADED'
-  const passed = isGraded && submission.score !== null && submission.score >= evaluation.passing_score
+  const passed = isGraded && submission.score !== null && submission.score >= Math.round(evaluation.passing_score * evaluation.max_score / 100)
   const attemptsUsed = submission?.attempts_used ?? 0
   const canRetry = isGraded && !passed && attemptsUsed < evaluation.max_attempts
   const exhausted = isGraded && !passed && attemptsUsed >= evaluation.max_attempts
@@ -814,7 +815,7 @@ function QuizModal({ evaluation, onClose, onSubmitted }: {
 
   const answeredCount = Object.keys(answers).length
   const totalQuestions = questions.length
-  const passed = result?.score !== null && result?.score !== undefined && result.score >= evaluation.passing_score
+  const passed = result?.score !== null && result?.score !== undefined && result.score >= Math.round(evaluation.passing_score * evaluation.max_score / 100)
   const exhausted = result !== null && !passed && result.attempts_used >= evaluation.max_attempts
   const canRetry = result !== null && !passed && !exhausted
   const remainingAttempts = result ? evaluation.max_attempts - result.attempts_used : 0

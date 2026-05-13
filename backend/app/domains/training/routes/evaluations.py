@@ -12,6 +12,7 @@ from app.domains.auth.dependencies import get_current_user
 from app.domains.academic.repositories.rubric_repository import RubricRepository
 from app.domains.auth.models import User
 from app.domains.rbac.repositories import UserRoleRepository
+from app.domains.training.models.training_evaluation import TrainingEvaluation
 from app.domains.training.repositories.evaluation_repository import EvaluationRepository
 from app.domains.training.repositories.module_repository import ModuleRepository
 from app.domains.training.repositories.quiz_question_repository import QuizQuestionRepository
@@ -167,10 +168,17 @@ def delete_question(
     session: Session = Depends(get_session),
     _: User = Depends(require_roles("ADMIN", "TRAINER", "SUPER_TRAINER")),
 ):
-    question = QuizQuestionRepository(session).get_by_public_id(question_id)
+    repo = QuizQuestionRepository(session)
+    question = repo.get_by_public_id(question_id)
     if question is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pregunta no encontrada")
-    QuizQuestionRepository(session).delete(question)
+    evaluation = session.get(TrainingEvaluation, question.evaluation_id)
+    repo.delete(question)
+    if evaluation:
+        remaining = repo.list_by_evaluation(evaluation.id)
+        evaluation.max_score = sum(q.points for q in remaining)
+        session.add(evaluation)
+        session.commit()
 
 
 class _RubricLevelBody(BaseModel):
