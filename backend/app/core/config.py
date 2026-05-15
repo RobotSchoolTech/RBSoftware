@@ -13,9 +13,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
 
-    # SSO / Authentik
-    authentik_url: str = "https://auth.miel-robotschool.com"
-    authentik_client_id: str = "portal"
+    # Portal SSO — public key endpoint of the central auth service
+    jwt_jwks_url: str = "https://id.miel-robotschool.com/auth/jwks"
 
     # WooCommerce integration (optional)
     woo_url: str | None = None

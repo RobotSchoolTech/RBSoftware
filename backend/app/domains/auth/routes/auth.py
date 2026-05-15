@@ -1,19 +1,27 @@
 from __future__ import annotations
 
 import json
+import secrets
+import time
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+import httpx
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
+from jose import jwt as jose_jwt
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, select
+from starlette.responses import RedirectResponse
 
+from app.core.config import settings
 from app.core.database import get_session
-from app.core.security import create_access_token
+from app.core.security import create_access_token, hash_password
 from app.domains.audit.services import AuditService
 from app.domains.auth.dependencies import get_current_user, get_current_user_optional
 from app.domains.auth.models import User
-from app.domains.auth.schemas import UserRead
+from app.domains.auth.schemas import UserCreate, UserRead
+from app.domains.auth.repositories import UserRepository
 from app.domains.auth.services.refresh_token_service import RefreshTokenService
 from app.domains.auth.services.user_service import UserService
+from app.domains.rbac.models import Role, UserRole
 from app.domains.rbac.repositories import UserRoleRepository
 from app.domains.rbac.services import UserRoleService
 
@@ -162,3 +170,113 @@ def me(
     roles = UserRoleService().get_roles_for_user(session, current_user.id)
     role_names = [r.name for r in roles]
     return UserRead.model_validate(current_user).model_copy(update={"roles": role_names})
+
+
+# ── Portal SSO ──────────────────────────────────────────────────────────────
+
+_PORTAL_URL = "https://app.miel-robotschool.com"
+_SSO_GROUP_TO_LMS_ROLE: dict[str, str] = {
+    "admin": "ADMIN",
+    "director": "DIRECTOR",
+    "teacher": "TEACHER",
+    "trainer": "TRAINER",
+    "super_trainer": "TRAINER",
+    "tallerista": "TRAINER",
+    "student": "STUDENT",
+    "staff": "TEACHER",
+    "comercial": "COMERCIAL",
+    "produccion": "OPERATIVO",
+    "reparto": "OPERATIVO",
+}
+
+_jwks_cache: list[dict] = []
+_jwks_cache_at: float = 0.0
+
+
+def _get_jwks() -> list[dict]:
+    global _jwks_cache, _jwks_cache_at
+    if not _jwks_cache or time.monotonic() - _jwks_cache_at > 3600:
+        try:
+            r = httpx.get(settings.jwt_jwks_url, timeout=5)
+            r.raise_for_status()
+            _jwks_cache = r.json().get("keys", [])
+            _jwks_cache_at = time.monotonic()
+        except Exception:
+            pass
+    return _jwks_cache
+
+
+def _validate_portal_token(token: str) -> dict | None:
+    try:
+        header = jose_jwt.get_unverified_header(token)
+        kid = header.get("kid")
+        keys = _get_jwks()
+        if not keys:
+            return None
+        key = next((k for k in keys if k.get("kid") == kid), keys[0])
+        claims = jose_jwt.decode(
+            token, key, algorithms=["RS256"], options={"verify_aud": False}
+        )
+        return claims
+    except Exception:
+        return None
+
+
+def _assign_sso_role(session: Session, user: User, groups: list[str]) -> None:
+    role_name = next(
+        (_SSO_GROUP_TO_LMS_ROLE[g] for g in groups if g in _SSO_GROUP_TO_LMS_ROLE),
+        "TEACHER",
+    )
+    role = session.exec(select(Role).where(Role.name == role_name)).first()
+    if role:
+        session.add(UserRole(user_id=user.id, role_id=role.id))
+        session.commit()
+
+
+@router.get("/sso")
+def sso_login(
+    request: Request,
+    token: str = Query(...),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    claims = _validate_portal_token(token)
+    if not claims:
+        return RedirectResponse(url=f"{_PORTAL_URL}?error=sso_invalid", status_code=302)
+
+    email = (claims.get("email") or "").lower().strip()
+    if not email:
+        return RedirectResponse(url=f"{_PORTAL_URL}?error=sso_no_email", status_code=302)
+
+    user_repo = UserRepository(session)
+    user = user_repo.get_by_email(email)
+
+    if user is None:
+        name = (claims.get("name") or email).strip()
+        parts = name.split(" ", 1)
+        first, last = parts[0], parts[1] if len(parts) > 1 else ""
+        user = user_repo.create(UserCreate(
+            email=email,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            first_name=first,
+            last_name=last,
+        ))
+        _assign_sso_role(session, user, claims.get("groups") or [])
+
+    if not user.is_active:
+        return RedirectResponse(url=f"{_PORTAL_URL}?error=sso_inactive", status_code=302)
+
+    raw_refresh, _ = RefreshTokenService().create_token(session, user.id)
+    access_token = create_access_token({"sub": str(user.public_id)})
+    role_names = UserRoleRepository(session).get_role_names_for_user(user.id)
+
+    redirect = RedirectResponse(url="/dashboard", status_code=302)
+    _set_auth_cookies(redirect, access_token, raw_refresh, role_names)
+    _audit.log(
+        session,
+        user_id=user.id,
+        action="auth.sso_login",
+        resource_type="user",
+        resource_id=str(user.public_id),
+        ip=_client_ip(request),
+    )
+    return redirect

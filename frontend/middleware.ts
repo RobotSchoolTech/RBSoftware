@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/training/verify', '/sso']
+const PUBLIC_PATHS = ['/login', '/sso', '/training/verify']
 
 /** Routes that require specific roles. ADMIN always passes. */
 const ROUTE_ROLES: [string, string[]][] = [
