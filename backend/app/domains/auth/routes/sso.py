@@ -23,22 +23,10 @@ from app.domains.rbac.schemas import UserRoleCreate
 
 router = APIRouter(prefix="/auth/sso", tags=["auth"])
 
+_PLATFORM_KEY = "lms"  # clave de esta plataforma en el claim 'platforms' del JWT
+_ROLE_NONE = "__none__"
+
 _audit = AuditService()
-
-_GROUP_TO_ROLE: dict[str, str] = {
-    "admin":         "ADMIN",
-    "director":      "DIRECTOR",
-    "trainer":       "TRAINER",
-    "super_trainer": "TRAINER",
-    "tallerista":    "TRAINER",
-    "teacher":       "TEACHER",
-    "student":       "STUDENT",
-    "staff":         "TEACHER",
-    "comercial":     "COMERCIAL",
-    "produccion":    "OPERATIVO",
-    "reparto":       "OPERATIVO",
-}
-
 _jwks_cache: list[dict] = []
 _jwks_cache_at: float = 0.0
 
@@ -75,20 +63,22 @@ def _validate_token(token: str, jwks: list[dict]) -> dict:
     return claims
 
 
-def _sync_roles(
-    session: Session,
-    user_id: int,
-    groups: list[str],
-) -> list[str]:
-    user_role_repo = UserRoleRepository(session)
+def _sync_role(session: Session, user_id: int, role_key: str) -> list[str]:
+    """Sincroniza los user_roles del usuario para que sea EXACTAMENTE [role_key].
+
+    El portal admin es la única fuente de verdad: si llega TEACHER pero el user
+    tenía TRAINER, se reemplaza. Devuelve la lista de roles resultante.
+    """
     role_repo = RoleRepository(session)
-    target = {_GROUP_TO_ROLE[g] for g in groups if g in _GROUP_TO_ROLE}
-    current = set(user_role_repo.get_role_names_for_user(user_id))
-    for role_name in target - current:
-        role = role_repo.get_by_name(role_name)
-        if role:
-            user_role_repo.create(UserRoleCreate(user_id=user_id, role_id=role.id))
-    return list(current | target)
+    user_role_repo = UserRoleRepository(session)
+    role = role_repo.get_by_name(role_key)
+    if role is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Rol '{role_key}' inexistente en LMS — sincronizar con portal admin",
+        )
+    user_role_repo.set_user_roles(user_id, [role.id])
+    return [role.name]
 
 
 class SSOTokenRequest(BaseModel):
@@ -108,18 +98,25 @@ async def sso_login(
         jwks = await _get_jwks()
         claims = _validate_token(body.token, jwks)
     except HTTPException:
-        _jwks_cache.clear()  # force refetch on next attempt
+        _jwks_cache.clear()
         raise
 
     email = (claims.get("email") or "").lower().strip()
     if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token sin email")
 
+    platforms = claims.get("platforms") or {}
+    role_key = platforms.get(_PLATFORM_KEY)
+    if not role_key or role_key == _ROLE_NONE:
+        _audit.log(session, user_id=None, action="auth.sso_no_access",
+                   resource_type="user", resource_id=email, ip=ip)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Sin acceso al LMS")
+
     user_repo = UserRepository(session)
     user: User | None = user_repo.get_by_email(email)
 
     if user is None:
-        # JIT provision: create LMS user from portal JWT claims
         name = (claims.get("name") or email).strip()
         parts = name.split(" ", 1)
         first, last = parts[0], parts[1] if len(parts) > 1 else ""
@@ -135,8 +132,7 @@ async def sso_login(
                    resource_type="user", resource_id=email, ip=ip)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cuenta inactiva")
 
-    groups: list[str] = claims.get("groups") or []
-    role_names = _sync_roles(session, user.id, groups)
+    role_names = _sync_role(session, user.id, role_key)
 
     raw_refresh, _ = RefreshTokenService().create_token(session, user.id)
     access_token = create_access_token({"sub": str(user.public_id)})

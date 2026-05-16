@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     # Portal SSO — public key endpoint of the central auth service
     jwt_jwks_url: str = "https://id.miel-robotschool.com/auth/jwks"
+    # Service token compartido portal↔plataformas (para /admin/roles)
+    portal_service_token: str = "service-token-changeme"
 
     # WooCommerce integration (optional)
     woo_url: str | None = None

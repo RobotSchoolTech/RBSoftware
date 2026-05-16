@@ -49,3 +49,21 @@ class UserRoleRepository:
             .where(UserRole.user_id == user_id)
         )
         return list(self.session.exec(statement).all())
+
+    def set_user_roles(self, user_id: int, role_ids: list[int]) -> None:
+        """Reemplaza atómicamente el conjunto de roles del usuario.
+
+        Borra los UserRole existentes que no estén en `role_ids` y agrega los
+        que falten. Pensado para sincronizar desde el portal admin (fuente
+        única de verdad).
+        """
+        existing = self.list_by_user_id(user_id)
+        existing_ids = {ur.role_id for ur in existing}
+        target_ids = set(role_ids)
+
+        for ur in existing:
+            if ur.role_id not in target_ids:
+                self.session.delete(ur)
+        for rid in target_ids - existing_ids:
+            self.session.add(UserRole(user_id=user_id, role_id=rid))
+        self.session.commit()
