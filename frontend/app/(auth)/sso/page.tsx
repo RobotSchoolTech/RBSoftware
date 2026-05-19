@@ -6,6 +6,8 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import type { User } from '@/lib/types'
 
+const PORTAL_LOGIN_URL = 'https://app.miel-robotschool.com/?next=lms'
+
 function SSOContent() {
   const router = useRouter()
   const params = useSearchParams()
@@ -15,7 +17,7 @@ function SSOContent() {
   useEffect(() => {
     const token = params.get('token')
     if (!token) {
-      router.replace('/login')
+      window.location.href = PORTAL_LOGIN_URL
       return
     }
 
@@ -36,8 +38,8 @@ function SSOContent() {
       <div className="flex min-h-screen items-center justify-center bg-muted/40">
         <div className="w-full max-w-sm space-y-4 rounded-xl border bg-card p-8 shadow-sm text-center">
           <p className="text-sm text-destructive">{error}</p>
-          <a href="/login" className="text-sm text-primary underline">
-            Volver al login
+          <a href={PORTAL_LOGIN_URL} className="text-sm text-primary underline">
+            Volver al portal
           </a>
         </div>
       </div>

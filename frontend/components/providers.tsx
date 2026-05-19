@@ -26,10 +26,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (window.location.pathname === '/login') {
-      setHydrated()
-      return
-    }
     api
       .get<User>('/auth/me')
       .then((user) => setUser(user))
