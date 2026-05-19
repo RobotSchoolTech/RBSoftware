@@ -589,7 +589,7 @@ function DashboardContent() {
           <button
             onClick={async () => {
               await api.post('/auth/logout').catch(() => {})
-              window.location.href = '/login'
+              window.location.href = 'https://app.miel-robotschool.com/?logout=1'
             }}
             className="shrink-0 text-xs font-medium text-red-700 hover:underline dark:text-red-400"
           >

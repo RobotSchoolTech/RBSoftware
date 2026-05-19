@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import {
   Award,
   BookOpen,
@@ -46,7 +46,6 @@ interface NavSection {
 
 export function Nav() {
   const pathname = usePathname()
-  const router = useRouter()
   const { user, setUser, hasRole, isAdmin } = useAuthStore()
   const { open, collapsed, setOpen, toggleCollapsed } = useSidebarStore()
   const { theme, toggleTheme, syncFromSystem } = useThemeStore()
@@ -106,7 +105,9 @@ export function Nav() {
   async function handleLogout() {
     await api.post('/auth/logout').catch(() => {})
     setUser(null)
-    router.push('/login')
+    // Federacion de logout: el portal central revoca el JWT y muestra state-login.
+    // Sin esto regresabamos al /login local del LMS rompiendo el SSO unificado.
+    window.location.href = 'https://app.miel-robotschool.com/?logout=1'
   }
 
   function handleNavClick() {
