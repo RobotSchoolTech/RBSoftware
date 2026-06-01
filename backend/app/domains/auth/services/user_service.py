@@ -65,26 +65,13 @@ class UserService:
         self,
         session: Session,
         public_id: UUID,
-        first_name: str | None = None,
-        last_name: str | None = None,
-        phone: str | None = None,
-        position: str | None = None,
-        is_active: bool | None = None,
+        **kwargs,
     ) -> User | None:
         repo = UserRepository(session)
         user = repo.get_by_public_id(public_id)
         if user is None:
             return None
-        return repo.update(
-            user,
-            UserUpdate(
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                position=position,
-                is_active=is_active,
-            ),
-        )
+        return repo.update(user, UserUpdate(**kwargs))
 
     def change_password(
         self,

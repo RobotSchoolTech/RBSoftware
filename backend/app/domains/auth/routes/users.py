@@ -224,11 +224,7 @@ def update_user(
     user = _svc.update_user(
         session,
         public_id=user_id,
-        first_name=data.first_name,
-        last_name=data.last_name,
-        phone=data.phone,
-        position=data.position,
-        is_active=data.is_active,
+        **data.model_dump(exclude_unset=True),
     )
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
