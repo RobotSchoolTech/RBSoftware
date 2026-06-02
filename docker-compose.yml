@@ -38,6 +38,8 @@ services:
       context: ./backend
     container_name: rbsoftware-backend
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
     env_file:
       - ./backend/.env
     depends_on:
@@ -49,6 +51,8 @@ services:
       context: ./frontend
     container_name: rbsoftware-frontend
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
     depends_on:
       - backend
 
