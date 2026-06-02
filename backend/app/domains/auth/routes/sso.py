@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 
@@ -27,6 +28,7 @@ _PLATFORM_KEY = "lms"  # clave de esta plataforma en el claim 'platforms' del JW
 _ROLE_NONE = "__none__"
 
 _audit = AuditService()
+_log = logging.getLogger(__name__)
 _jwks_cache: list[dict] = []
 _jwks_cache_at: float = 0.0
 
@@ -108,8 +110,11 @@ async def sso_login(
     platforms = claims.get("platforms") or {}
     role_key = platforms.get(_PLATFORM_KEY)
     if not role_key or role_key == _ROLE_NONE:
-        _audit.log(session, user_id=None, action="auth.sso_no_access",
-                   resource_type="user", resource_id=email, ip=ip)
+        try:
+            _audit.log(session, user_id=None, action="auth.sso_no_access",
+                       resource_type="user", resource_id=email, ip=ip)
+        except Exception:
+            _log.exception("audit sso_no_access failed")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Sin acceso al LMS")
 
@@ -128,8 +133,11 @@ async def sso_login(
         ))
 
     if not user.is_active:
-        _audit.log(session, user_id=user.id, action="auth.sso_blocked",
-                   resource_type="user", resource_id=email, ip=ip)
+        try:
+            _audit.log(session, user_id=user.id, action="auth.sso_blocked",
+                       resource_type="user", resource_id=email, ip=ip)
+        except Exception:
+            _log.exception("audit sso_blocked failed")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cuenta inactiva")
 
     role_names = _sync_role(session, user.id, role_key)
@@ -138,7 +146,10 @@ async def sso_login(
     access_token = create_access_token({"sub": str(user.public_id)})
     _set_auth_cookies(response, access_token, raw_refresh, role_names)
 
-    _audit.log(session, user_id=user.id, action="auth.sso_login",
-               resource_type="user", resource_id=str(user.public_id), ip=ip)
+    try:
+        _audit.log(session, user_id=user.id, action="auth.sso_login",
+                   resource_type="user", resource_id=str(user.public_id), ip=ip)
+    except Exception:
+        _log.exception("audit sso_login failed")
 
     return {"ok": True}
