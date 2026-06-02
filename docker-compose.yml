@@ -2,7 +2,7 @@ services:
   mysql:
     image: mysql:8.0
     container_name: rbsoftware-mysql
-    restart: unless-stopped
+    restart: "no"
     environment:
       MYSQL_DATABASE: rbsoftware
       MYSQL_USER: rbsoftware
@@ -21,7 +21,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: rbsoftware-minio
-    restart: unless-stopped
+    restart: "no"
     command: server /data --console-address ":9001"
     env_file: infra/.env
     volumes:
