@@ -27,5 +27,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # En MySQL el tipo ENUM es inline en la columna: drop_column lo elimina.
+    # No hay `DROP TYPE` (eso es sintaxis PostgreSQL y rompería el downgrade en MySQL).
     op.drop_column('schools', 'work_line')
-    op.execute("DROP TYPE IF EXISTS workline")
