@@ -4,11 +4,13 @@ from fastapi.testclient import TestClient
 
 from app.core.security import hash_password
 from app.domains.auth.models import User
+from app.domains.rbac.models import Role, UserRole
+from app.domains.rbac.repositories import UserRoleRepository
 
 
 @pytest.fixture(name="auth_client")
 def auth_client_fixture(client: TestClient, session):
-    """Client already authenticated as a test user."""
+    """Client authenticated as a test user with the ADMIN role."""
     user = User(
         email="admin@robotschool.com",
         password_hash=hash_password("admin123"),
@@ -17,7 +19,32 @@ def auth_client_fixture(client: TestClient, session):
     )
     session.add(user)
     session.commit()
+    session.refresh(user)
+
+    admin_role = Role(name="ADMIN", description="Superusuario")
+    session.add(admin_role)
+    session.commit()
+    session.refresh(admin_role)
+    session.add(UserRole(user_id=user.id, role_id=admin_role.id))
+    session.commit()
+
     client.post("/auth/login", json={"email": "admin@robotschool.com", "password": "admin123"})
+    return client, user
+
+
+@pytest.fixture(name="plain_client")
+def plain_client_fixture(client: TestClient, session):
+    """Client authenticated as a user WITHOUT any role (no ADMIN)."""
+    user = User(
+        email="student@robotschool.com",
+        password_hash=hash_password("student123"),
+        first_name="Plain",
+        last_name="Student",
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    client.post("/auth/login", json={"email": "student@robotschool.com", "password": "student123"})
     return client, user
 
 
@@ -205,3 +232,32 @@ def test_rbac_endpoints_require_auth(client: TestClient) -> None:
     """All RBAC endpoints must reject unauthenticated requests."""
     assert client.get("/rbac/roles").status_code == 401
     assert client.get("/rbac/permissions").status_code == 401
+
+
+def test_non_admin_cannot_mutate_rbac(plain_client, session) -> None:
+    """Regresión: un usuario autenticado SIN rol ADMIN no puede mutar RBAC.
+
+    Cierra la escalada de privilegios de la auditoría 2026-06-04: un STUDENT
+    no debe poder crear roles ni auto-asignarse ADMIN.
+    """
+    client, user = plain_client
+
+    # Crear un rol ADMIN por fuera (como si ya existiera en el sistema).
+    admin_role = Role(name="ADMIN", description="Superusuario")
+    session.add(admin_role)
+    session.commit()
+    session.refresh(admin_role)
+
+    # Mutaciones de roles/permisos → 403
+    assert client.post("/rbac/roles", json={"name": "hacker"}).status_code == 403
+    assert (
+        client.post("/rbac/permissions", json={"code": "x.y.z"}).status_code == 403
+    )
+
+    # El vector de la auditoría: auto-asignarse ADMIN → 403
+    resp = client.post(f"/rbac/users/{user.public_id}/roles/{admin_role.public_id}")
+    assert resp.status_code == 403
+
+    # Y de hecho NO quedó con el rol asignado.
+    names = UserRoleRepository(session).get_role_names_for_user(user.id)
+    assert "ADMIN" not in names

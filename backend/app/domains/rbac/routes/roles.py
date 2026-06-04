@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.core.database import get_session
+from app.core.permissions import require_roles
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
 from app.domains.rbac.repositories import PermissionRepository, RolePermissionRepository
@@ -43,7 +44,7 @@ def list_roles(
 def create_role(
     data: RoleCreate,
     session: Session = Depends(get_session),
-    _: object = Depends(get_current_user),
+    _: User = Depends(require_roles("ADMIN")),
 ) -> RoleRead:
     try:
         role = _role_svc.create_role(session, data)
@@ -75,7 +76,7 @@ def list_role_permissions(
 def delete_role(
     public_id: UUID,
     session: Session = Depends(get_session),
-    _: object = Depends(get_current_user),
+    _: User = Depends(require_roles("ADMIN")),
 ) -> None:
     deleted = _role_svc.delete_role(session, public_id)
     if not deleted:
@@ -93,7 +94,7 @@ def assign_permission_to_role(
     role_id: UUID,
     permission_id: UUID,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("ADMIN")),
 ) -> None:
     role = _role_svc.get_role(session, role_id)
     if role is None:
@@ -122,7 +123,7 @@ def remove_permission_from_role(
     role_id: UUID,
     permission_id: UUID,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("ADMIN")),
 ) -> None:
     role = _role_svc.get_role(session, role_id)
     if role is None:
