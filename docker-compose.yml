@@ -45,6 +45,9 @@ services:
     depends_on:
       - mysql
       - minio
+    networks:
+      - default
+      - robotschool
 
   frontend:
     build:
@@ -55,6 +58,9 @@ services:
     cpus: 0.5
     depends_on:
       - backend
+    networks:
+      - default
+      - robotschool
 
 volumes:
   mysql_data_prod:
@@ -63,3 +69,9 @@ volumes:
   minio_data_prod:
     external: true
     name: rbsoftware_rbsoftware_minio_data
+
+networks:
+  default:
+  robotschool:
+    external: true
+    name: robotschool-inventory_robotschool
