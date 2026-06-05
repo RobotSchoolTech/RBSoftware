@@ -21,3 +21,6 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Local dev overrides
+docker-compose.override.yml

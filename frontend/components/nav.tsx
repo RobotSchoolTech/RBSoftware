@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import {
   Award,
   BookOpen,
@@ -49,6 +50,8 @@ export function Nav() {
   const { user, setUser, hasRole, isAdmin } = useAuthStore()
   const { open, collapsed, setOpen, toggleCollapsed } = useSidebarStore()
   const { theme, toggleTheme, syncFromSystem } = useThemeStore()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   const sections: NavSection[] = [
     {
@@ -260,7 +263,7 @@ export function Nav() {
             className="rounded-lg p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
             title="Clic: alternar tema · Doble clic: seguir tema del sistema"
           >
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            {mounted && (theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />)}
           </button>
         </div>
 

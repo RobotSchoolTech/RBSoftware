@@ -1,20 +1,29 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import type { User } from '@/lib/types'
 
-const PORTAL_LOGIN_URL = 'https://app.miel-robotschool.com/?next=lms'
+const PORTAL_LOGIN_URL =
+  process.env.NEXT_PUBLIC_DEV_LOGIN === 'true'
+    ? '/login'
+    : 'https://app.miel-robotschool.com/?next=lms'
 
 function SSOContent() {
   const router = useRouter()
   const params = useSearchParams()
   const setUser = useAuthStore((s) => s.setUser)
   const [error, setError] = useState<string | null>(null)
+  const canjeado = useRef(false)
 
   useEffect(() => {
+    // Guardia: el token SSO es single-use. Sin esto, StrictMode (dev) corre
+    // el efecto dos veces → doble POST de canje → el 2.º falla con "sin acceso".
+    if (canjeado.current) return
+    canjeado.current = true
+
     const token = params.get('token')
     if (!token) {
       window.location.href = PORTAL_LOGIN_URL

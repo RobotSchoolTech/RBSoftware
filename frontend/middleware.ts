@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/sso', '/training/verify']
+const PUBLIC_PATHS = ['/sso', '/login', '/training/verify']
 
 /** Routes that require specific roles. ADMIN always passes. */
 const ROUTE_ROLES: [string, string[]][] = [
@@ -41,6 +41,11 @@ export function middleware(request: NextRequest) {
 
   // Not authenticated → portal (con ?next=lms para auto-redirect tras login)
   if (!token && !isPublic) {
+    if (process.env.NEXT_PUBLIC_DEV_LOGIN === 'true') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
     return NextResponse.redirect('https://app.miel-robotschool.com?next=lms')
   }
 

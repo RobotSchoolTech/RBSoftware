@@ -1,6 +1,7 @@
 'use client'
 
 import { Menu, X } from 'lucide-react'
+import { AuthBootstrap } from '@/components/auth-bootstrap'
 import { Nav } from '@/components/nav'
 import { Toaster } from '@/components/ui/toaster'
 import { useSidebarStore } from '@/lib/store'
@@ -10,6 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <AuthBootstrap />
       {/* Overlay — mobile only */}
       {open && (
         <div

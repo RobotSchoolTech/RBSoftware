@@ -28,7 +28,10 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
 
     if (typeof window !== 'undefined') {
       // Sesion LMS expirada: rebotar al portal central para re-SSO (o login si no hay sesion JWT viva).
-      window.location.href = 'https://app.miel-robotschool.com/?next=lms'
+      window.location.href =
+        process.env.NEXT_PUBLIC_DEV_LOGIN === 'true'
+          ? '/login'
+          : 'https://app.miel-robotschool.com/?next=lms'
       return new Promise<T>(() => {})
     }
 
