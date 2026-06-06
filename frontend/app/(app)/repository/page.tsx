@@ -15,9 +15,12 @@ import {
   FolderOpen,
   FolderPlus,
   Loader2,
+  Lock,
   Search,
+  Share2,
   Trash2,
   Upload,
+  Users,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -29,6 +32,14 @@ import { api } from '@/lib/api'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+interface ShareRead {
+  id: number
+  scope_type: 'work_line' | 'school'
+  work_line: string | null
+  school_id: string | null
+  school_name: string | null
+}
+
 interface FolderRead {
   public_id: string
   name: string
@@ -39,6 +50,24 @@ interface FolderRead {
   created_by_name: string | null
   created_at: string
   updated_at: string
+  shares: ShareRead[]
+}
+
+interface SchoolOption {
+  public_id: string
+  name: string
+  work_line: string | null
+}
+
+interface ShareOptions {
+  work_lines: string[]
+  schools: SchoolOption[]
+}
+
+const WORK_LINE_LABELS: Record<string, string> = {
+  robotschool: 'RobotSchool',
+  kuntur: 'Kuntur',
+  ecua: 'Ecua',
 }
 
 interface FileRead {
@@ -209,6 +238,13 @@ export default function RepositoryPage() {
   const [viewerFileName, setViewerFileName] = useState('')
   const [viewerFileType, setViewerFileType] = useState<'PDF' | 'IMAGE'>('PDF')
 
+  // Share modal
+  const [shareFolder, setShareFolder] = useState<FolderRead | null>(null)
+  const [shareList, setShareList] = useState<ShareRead[]>([])
+  const [shareOptions, setShareOptions] = useState<ShareOptions | null>(null)
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareSaving, setShareSaving] = useState(false)
+
   // Load root folders on mount
   const loadRootFolders = useCallback(async () => {
     try {
@@ -368,6 +404,66 @@ export default function RepositoryPage() {
     }
   }
 
+  // Share: open modal + load options/current shares
+  const handleOpenShare = async (folder: FolderRead) => {
+    setShareFolder(folder)
+    setShareLoading(true)
+    try {
+      const [opts, shares] = await Promise.all([
+        shareOptions
+          ? Promise.resolve(shareOptions)
+          : api.get<ShareOptions>('/repository/share-options'),
+        api.get<ShareRead[]>(`/repository/folders/${folder.public_id}/shares`),
+      ])
+      setShareOptions(opts)
+      setShareList(shares)
+    } catch {
+      toast({ title: 'Error al cargar compartición', variant: 'destructive' })
+      setShareFolder(null)
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  const refreshAfterShareChange = async () => {
+    await loadRootFolders()
+    if (activeFolderId) await loadFolder(activeFolderId)
+  }
+
+  const handleAddShare = async (
+    payload: { scope_type: 'work_line'; work_line: string } | { scope_type: 'school'; school_id: string },
+  ) => {
+    if (!shareFolder) return
+    setShareSaving(true)
+    try {
+      await api.post(`/repository/folders/${shareFolder.public_id}/shares`, payload)
+      const shares = await api.get<ShareRead[]>(
+        `/repository/folders/${shareFolder.public_id}/shares`,
+      )
+      setShareList(shares)
+      await refreshAfterShareChange()
+    } catch (e: any) {
+      const msg = e?.status === 409 ? 'Esa compartición ya existe' : 'Error al compartir'
+      toast({ title: msg, variant: 'destructive' })
+    } finally {
+      setShareSaving(false)
+    }
+  }
+
+  const handleRemoveShare = async (shareId: number) => {
+    if (!shareFolder) return
+    setShareSaving(true)
+    try {
+      await api.delete(`/repository/folders/${shareFolder.public_id}/shares/${shareId}`)
+      setShareList((prev) => prev.filter((s) => s.id !== shareId))
+      await refreshAfterShareChange()
+    } catch {
+      toast({ title: 'Error al quitar compartición', variant: 'destructive' })
+    } finally {
+      setShareSaving(false)
+    }
+  }
+
   const tree = buildTree(rootFolders)
 
   const displayFiles: FileRead[] = searchResults
@@ -519,6 +615,7 @@ export default function RepositoryPage() {
                       canManage={canManage}
                       onOpen={() => loadFolder(f.public_id)}
                       onDelete={() => handleDeleteFolder(f.public_id)}
+                      onShare={canManage ? () => handleOpenShare(f) : undefined}
                     />
                   ))}
                 </div>
@@ -541,6 +638,7 @@ export default function RepositoryPage() {
                         canManage={canManage}
                         onOpen={() => loadFolder(f.public_id)}
                         onDelete={() => handleDeleteFolder(f.public_id)}
+                        onShare={canManage ? () => handleOpenShare(f) : undefined}
                       />
                     ))}
                   </div>
@@ -690,6 +788,167 @@ export default function RepositoryPage() {
         fileType={viewerFileType}
         localUrl={viewerUrl}
       />
+
+      {/* Share folder modal */}
+      {shareFolder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-800">Compartir carpeta</h3>
+                <p className="mt-0.5 text-xs text-gray-500">{shareFolder.name}</p>
+              </div>
+              <button onClick={() => setShareFolder(null)}>
+                <X className="h-5 w-5 text-gray-400" />
+              </button>
+            </div>
+            {shareLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Compartida con
+                  </p>
+                  {shareList.length === 0 ? (
+                    <p className="flex items-center gap-1.5 text-sm text-gray-400">
+                      <Lock className="h-3.5 w-3.5" />
+                      Privada — solo tú y los administradores la ven.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {shareList.map((share) => (
+                        <span
+                          key={share.id}
+                          className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700"
+                        >
+                          {share.scope_type === 'work_line'
+                            ? (WORK_LINE_LABELS[share.work_line ?? ''] ?? share.work_line)
+                            : share.school_name}
+                          <button
+                            onClick={() => handleRemoveShare(share.id)}
+                            disabled={shareSaving}
+                            className="ml-0.5 rounded-full p-0.5 hover:bg-indigo-100 disabled:opacity-50"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <AddShareForm
+                  shareOptions={shareOptions}
+                  onAdd={handleAddShare}
+                  saving={shareSaving}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── AddShareForm ──────────────────────────────────────────────────────────────
+
+function AddShareForm({
+  shareOptions,
+  onAdd,
+  saving,
+}: {
+  shareOptions: ShareOptions | null
+  onAdd: (
+    payload:
+      | { scope_type: 'work_line'; work_line: string }
+      | { scope_type: 'school'; school_id: string },
+  ) => void
+  saving: boolean
+}) {
+  const [scopeType, setScopeType] = useState<'work_line' | 'school'>('work_line')
+  const [workLine, setWorkLine] = useState('')
+  const [schoolId, setSchoolId] = useState('')
+
+  const canSubmit = !saving && (scopeType === 'work_line' ? !!workLine : !!schoolId)
+
+  const handleSubmit = () => {
+    if (scopeType === 'work_line' && workLine) {
+      onAdd({ scope_type: 'work_line', work_line: workLine })
+      setWorkLine('')
+    } else if (scopeType === 'school' && schoolId) {
+      onAdd({ scope_type: 'school', school_id: schoolId })
+      setSchoolId('')
+    }
+  }
+
+  return (
+    <div className="border-t border-gray-100 pt-4">
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-500">
+        Agregar acceso
+      </p>
+      <div className="mb-3 flex gap-2">
+        {(['work_line', 'school'] as const).map((type) => (
+          <button
+            key={type}
+            onClick={() => {
+              setScopeType(type)
+              setWorkLine('')
+              setSchoolId('')
+            }}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              scopeType === type
+                ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                : 'border-gray-200 text-gray-600 hover:border-indigo-300'
+            }`}
+          >
+            {type === 'work_line' ? 'Línea de trabajo' : 'Colegio'}
+          </button>
+        ))}
+      </div>
+      {scopeType === 'work_line' ? (
+        <div className="flex flex-wrap gap-2">
+          {shareOptions?.work_lines.map((wl) => (
+            <button
+              key={wl}
+              onClick={() => setWorkLine(wl === workLine ? '' : wl)}
+              className={`rounded border px-3 py-1.5 text-xs transition-colors ${
+                workLine === wl
+                  ? 'border-indigo-600 bg-indigo-600 text-white'
+                  : 'border-gray-200 text-gray-600 hover:border-indigo-300'
+              }`}
+            >
+              {WORK_LINE_LABELS[wl] ?? wl}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <select
+          value={schoolId}
+          onChange={(e) => setSchoolId(e.target.value)}
+          className="w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none"
+        >
+          <option value="">Seleccionar colegio...</option>
+          {shareOptions?.schools.map((s) => (
+            <option key={s.public_id} value={s.public_id}>
+              {s.name}
+              {s.work_line ? ` · ${WORK_LINE_LABELS[s.work_line] ?? s.work_line}` : ''}
+            </option>
+          ))}
+        </select>
+      )}
+      <div className="mt-3 flex justify-end">
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={!canSubmit}
+          className="bg-[#1A237E] hover:bg-[#283593]"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Agregar acceso'}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -701,31 +960,59 @@ function FolderCard({
   canManage,
   onOpen,
   onDelete,
+  onShare,
 }: {
   folder: FolderRead
   canManage: boolean
   onOpen: () => void
   onDelete: () => void
+  onShare?: () => void
 }) {
   return (
     <div className="group relative flex flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
       <button onClick={onOpen} className="flex flex-col items-start gap-2 text-left">
-        <Folder className="h-8 w-8 text-amber-400" />
+        <div className="flex items-center gap-2">
+          <Folder className="h-8 w-8 text-amber-400" />
+          {folder.shares.length === 0 && <Lock className="h-3 w-3 text-gray-300" title="Privada" />}
+        </div>
         <span className="line-clamp-2 text-sm font-medium text-gray-800">{folder.name}</span>
         <span className="text-xs text-gray-400">
           {folder.subfolder_count} subcarpetas · {folder.file_count} archivos
         </span>
+        {folder.shares.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {folder.shares.map((s) => (
+              <span
+                key={s.id}
+                className="inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600"
+              >
+                {s.scope_type === 'work_line'
+                  ? (WORK_LINE_LABELS[s.work_line ?? ''] ?? s.work_line)
+                  : s.school_name}
+              </span>
+            ))}
+          </div>
+        )}
       </button>
       {canManage && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete()
-          }}
-          className="absolute right-2 top-2 hidden rounded p-1 hover:bg-red-50 group-hover:block"
-        >
-          <Trash2 className="h-3.5 w-3.5 text-red-400" />
-        </button>
+        <div className="absolute right-2 top-2 hidden items-center gap-0.5 group-hover:flex">
+          {onShare && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onShare() }}
+              className="rounded p-1 hover:bg-indigo-50"
+              title="Compartir"
+            >
+              <Users className="h-3.5 w-3.5 text-indigo-400" />
+            </button>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete() }}
+            className="rounded p-1 hover:bg-red-50"
+            title="Eliminar"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-red-400" />
+          </button>
+        </div>
       )}
     </div>
   )
