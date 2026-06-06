@@ -1,77 +1,97 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Compose CANÓNICO de PROD del LMS (rbsoftware).
+#
+# Deploy (desde /opt/robotschool/RBSoftware):
+#     docker compose up -d --build
+#     docker exec robotschool_nginx nginx -s reload   # tras recrear el backend
+#
+# La BD del LMS vive en su MySQL DEDICADO, sobre el volumen EXTERNAL
+# `rbsoftware_rbsoftware_mysql_data` (nombre fijo abajo → nunca crea uno vacío
+# nuevo, aunque cambie el project name). NO usar el MySQL consolidado.
+#
+# Secretos en infra/.env, backend/.env y frontend/.env.local (gitignored).
+# NUNCA poner credenciales en este archivo.
+#
+# Un solo compose: no crear `compose.lms.yml` ni variantes paralelas — la
+# ambigüedad de dos composes fue la causa raíz del split-brain (06-jun-2026).
+# ──────────────────────────────────────────────────────────────────────────
 services:
   mysql:
     image: mysql:8.0
     container_name: rbsoftware-mysql
-    restart: "no"
-    environment:
-      MYSQL_DATABASE: rbsoftware
-      MYSQL_USER: rbsoftware
-      MYSQL_PASSWORD: rbsoftware
-      MYSQL_ROOT_PASSWORD: root
+    hostname: rbsoftware-mysql
+    restart: unless-stopped
+    env_file: infra/.env
     volumes:
-      - mysql_data_prod:/var/lib/mysql
+      - rbsoftware_mysql_data:/var/lib/mysql
     command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
       interval: 60s
       timeout: 5s
-      retries: 3
-      start_period: 30s
+      retries: 10
+    networks:
+      robotschool:
+        aliases: [rbsoftware-mysql]
 
   minio:
     image: minio/minio:latest
     container_name: rbsoftware-minio
-    restart: "no"
-    command: server /data --console-address ":9001"
+    hostname: rbsoftware-minio
+    restart: unless-stopped
     env_file: infra/.env
+    command: server /data --console-address ":9001"
     volumes:
-      - minio_data_prod:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - rbsoftware_minio_data:/data
+    networks:
+      robotschool:
+        aliases: [rbsoftware-minio]
 
   backend:
     build:
       context: ./backend
     container_name: rbsoftware-backend
+    hostname: rbsoftware-backend
     restart: unless-stopped
     mem_limit: 512m
     cpus: 1.0
     env_file:
       - ./backend/.env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
-      - mysql
-      - minio
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_started
     networks:
-      - default
-      - robotschool
+      robotschool:
+        aliases: [rbsoftware-backend]
 
   frontend:
     build:
       context: ./frontend
     container_name: rbsoftware-frontend
+    hostname: rbsoftware-frontend
     restart: unless-stopped
     mem_limit: 256m
     cpus: 0.5
+    env_file:
+      - ./frontend/.env.local
     depends_on:
       - backend
     networks:
-      - default
-      - robotschool
+      robotschool:
+        aliases: [rbsoftware-frontend]
 
 volumes:
-  mysql_data_prod:
+  rbsoftware_mysql_data:
     external: true
     name: rbsoftware_rbsoftware_mysql_data
-  minio_data_prod:
+  rbsoftware_minio_data:
     external: true
     name: rbsoftware_rbsoftware_minio_data
 
 networks:
-  default:
   robotschool:
     external: true
     name: robotschool-inventory_robotschool
