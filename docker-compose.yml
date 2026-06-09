@@ -53,7 +53,9 @@ services:
     container_name: rbsoftware-backend
     hostname: rbsoftware-backend
     restart: unless-stopped
-    mem_limit: 512m
+    # 1g (no 512m): el upload del repositorio lee el archivo entero en RAM
+    # (await file.read()). PDFs de ~270 MB en un solo buffer ahogan 512 MB.
+    mem_limit: 1g
     cpus: 1.0
     env_file:
       - ./backend/.env
