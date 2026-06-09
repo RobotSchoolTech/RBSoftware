@@ -5,6 +5,7 @@ from uuid import UUID
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.core.database import get_session
@@ -64,6 +65,38 @@ async def add_material(
         material = _svc.add_material(
             session, unit.id, data, file_bytes, content_type, current_user.id
         )
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    return MaterialRead.model_validate(material)
+
+
+class MaterialFromRepositoryBody(BaseModel):
+    title: str
+    file_id: str
+
+
+@router.post(
+    "/units/{unit_id}/materials/from-repository",
+    response_model=MaterialRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_material_from_repository(
+    unit_id: UUID,
+    body: MaterialFromRepositoryBody,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_roles("ADMIN", "TEACHER")),
+):
+    unit = UnitRepository(session).get_by_public_id(unit_id)
+    if unit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unit not found")
+    try:
+        material = _svc.add_material_from_repository(
+            session, unit.id, body.title, body.file_id, current_user
+        )
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
     except PermissionError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     except ValueError as exc:

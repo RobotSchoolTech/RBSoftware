@@ -13,11 +13,17 @@ class MaterialRepository:
         self.session = session
 
     def create(
-        self, unit_id: int, payload: MaterialCreate, file_key: str | None = None
+        self,
+        unit_id: int,
+        payload: MaterialCreate,
+        file_key: str | None = None,
+        file_name: str | None = None,
     ) -> LmsMaterial:
         update = {"unit_id": unit_id}
         if file_key is not None:
             update["file_key"] = file_key
+        if file_name is not None:
+            update["file_name"] = file_name
         material = LmsMaterial.model_validate(payload, update=update)
         self.session.add(material)
         self.session.commit()

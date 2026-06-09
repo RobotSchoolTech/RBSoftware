@@ -23,6 +23,7 @@ class LmsMaterial(SQLModel, table=True):
     type: str = Field(sa_column=Column(String(20), nullable=False))
     content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     file_key: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    file_name: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
     order_index: int = Field(default=0, nullable=False)
     is_published: bool = Field(default=False, nullable=False)
     created_at: datetime = Field(

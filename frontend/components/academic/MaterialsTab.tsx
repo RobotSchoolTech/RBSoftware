@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Eye, ExternalLink, FileText, Film, Link2, Type, Trash2, Plus } from 'lucide-react'
+import { Eye, ExternalLink, File, FileText, Film, Link2, Type, Trash2, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import * as academicService from '@/services/academic'
@@ -14,6 +14,19 @@ const TYPE_ICON: Record<string, React.ElementType> = {
   VIDEO: Film,
   LINK: Link2,
   TEXT: Type,
+  FILE: File,
+}
+
+// Extensiones que el visor puede mostrar inline (PDF + imágenes). El resto
+// (docx, ppt, xls, etc.) se abre/descarga vía la URL prefirmada.
+const PREVIEWABLE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp']
+
+function extOf(name: string | null): string {
+  return (name?.split('.').pop() ?? '').toLowerCase()
+}
+
+function isPreviewable(name: string | null): boolean {
+  return PREVIEWABLE_EXTS.includes(extOf(name))
 }
 
 interface Props {
@@ -27,11 +40,10 @@ export function MaterialsTab({ unitId, materials, onChanged, canEditContent = tr
   const [showAdd, setShowAdd] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
-  const [opening, setOpening] = useState<string | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerMaterialId, setViewerMaterialId] = useState<string | null>(null)
   const [viewerFileName, setViewerFileName] = useState('')
-  const [viewerFileType, setViewerFileType] = useState<'PDF' | 'IMAGE'>('PDF')
+  const [viewerFileType, setViewerFileType] = useState<'PDF' | 'IMAGE' | 'auto'>('PDF')
 
   async function handleDelete(id: string) {
     setDeleting(id)
@@ -59,12 +71,22 @@ export function MaterialsTab({ unitId, materials, onChanged, canEditContent = tr
 
   function handleOpenViewer(m: MaterialRead) {
     setViewerMaterialId(m.public_id)
-    setViewerFileName(m.title)
-    setViewerFileType('PDF')
+    // El nombre real (con extensión) deja que el visor detecte PDF vs imagen.
+    setViewerFileName(m.file_name ?? m.title)
+    setViewerFileType(m.type === 'PDF' ? 'PDF' : 'auto')
     setViewerOpen(true)
   }
 
-  async function handleOpenExternal(m: MaterialRead) {
+  async function handleOpenFile(m: MaterialRead) {
+    try {
+      const { url } = await academicService.viewMaterial(m.public_id)
+      window.open(url, '_blank')
+    } catch {
+      // silencioso: el botón es secundario
+    }
+  }
+
+  function handleOpenExternal(m: MaterialRead) {
     if ((m.type === 'VIDEO' || m.type === 'LINK') && m.content) {
       window.open(m.content, '_blank')
     }
@@ -99,6 +121,9 @@ export function MaterialsTab({ unitId, materials, onChanged, canEditContent = tr
         )}
         {materials.map((m) => {
           const Icon = TYPE_ICON[m.type] ?? FileText
+          const fileCanPreview =
+            m.has_file && (m.type === 'PDF' || isPreviewable(m.file_name))
+          const fileNeedsOpen = m.has_file && !fileCanPreview
           return (
             <div
               key={m.public_id}
@@ -114,7 +139,7 @@ export function MaterialsTab({ unitId, materials, onChanged, canEditContent = tr
                   </Badge>
                 </div>
                 <div className="flex items-center gap-1">
-                  {m.type === 'PDF' && m.has_file && (
+                  {fileCanPreview && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -123,6 +148,17 @@ export function MaterialsTab({ unitId, materials, onChanged, canEditContent = tr
                     >
                       <Eye size={14} />
                       <span className="ml-1 text-xs">Vista previa</span>
+                    </Button>
+                  )}
+                  {fileNeedsOpen && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleOpenFile(m)}
+                      title="Abrir archivo"
+                    >
+                      <ExternalLink size={14} />
+                      <span className="ml-1 text-xs">Abrir</span>
                     </Button>
                   )}
                   {(m.type === 'VIDEO' || m.type === 'LINK') && m.content && (

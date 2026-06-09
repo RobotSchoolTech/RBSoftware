@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.core.storage import storage_service
 from app.domains.academic.models.lms_assignment import LmsAssignment
@@ -42,6 +42,8 @@ from app.domains.auth.models import User
 from app.domains.auth.repositories import UserRepository
 from app.domains.auth.schemas.user import UserRead
 from app.domains.rbac.repositories import UserRoleRepository
+from app.domains.repository.models.repository_file import RepositoryFile
+from app.domains.repository.services.visibility import can_see_file, get_user_scopes
 
 _audit = AuditService()
 
@@ -670,6 +672,61 @@ class AcademicService:
 
         return MaterialRepository(session).create(unit_id, data, file_key=file_key)
 
+    def add_material_from_repository(
+        self,
+        session: Session,
+        unit_id: int,
+        title: str,
+        repository_file_public_id: str,
+        requesting_user: User,
+    ) -> LmsMaterial:
+        unit = UnitRepository(session).get_by_id(unit_id)
+        if unit is None:
+            raise LookupError("Unit not found")
+        course = CourseRepository(session).get_by_id(unit.course_id)
+        self._assert_admin_or_teacher(session, course, requesting_user.id)
+
+        try:
+            # public_id del repositorio es String(36); normaliza el formato UUID
+            # (minúsculas con guiones) para casar con lo almacenado.
+            file_public_id = str(UUID(str(repository_file_public_id)))
+        except (ValueError, TypeError):
+            raise ValueError("Identificador de archivo inválido")
+
+        repo_file = session.exec(
+            select(RepositoryFile).where(RepositoryFile.public_id == file_public_id)
+        ).first()
+        if repo_file is None:
+            raise LookupError("Archivo no encontrado en el repositorio")
+
+        # El docente solo puede tomar archivos del repositorio que tiene permiso
+        # de ver (por línea/colegio). El listado del picker ya filtra, pero la
+        # verificación va también aquí: ocultar solo en la UI daría falsa
+        # privacidad.
+        scopes = get_user_scopes(session, requesting_user)
+        if not can_see_file(
+            session, repo_file.folder_id, repo_file.uploaded_by, requesting_user, scopes
+        ):
+            raise PermissionError("No tienes acceso a este archivo del repositorio")
+
+        # Reutiliza el mismo objeto en MinIO (no se duplica el archivo): el
+        # material apunta al file_key del repositorio.
+        ext = (repo_file.file_type or "").lower().lstrip(".")
+        material_type = "PDF" if ext == "pdf" else "FILE"
+
+        existing = MaterialRepository(session).list_by_unit(unit_id)
+        data = MaterialCreate(
+            title=title.strip() or repo_file.name,
+            type=material_type,
+            order_index=len(existing),
+        )
+        return MaterialRepository(session).create(
+            unit_id,
+            data,
+            file_key=repo_file.file_key,
+            file_name=repo_file.file_name,
+        )
+
     def delete_material(
         self,
         session: Session,
@@ -684,7 +741,11 @@ class AcademicService:
         course = CourseRepository(session).get_by_id(unit.course_id)
         self._assert_admin_or_teacher(session, course, requesting_user_id)
 
-        if material.file_key:
+        # Solo borrar el objeto en MinIO si es propio de academic. Los materiales
+        # tomados del repositorio reutilizan el file_key del repositorio
+        # (prefijo "repository/"): borrarlo dejaría rota la fuente y cualquier
+        # otra referencia compartida.
+        if material.file_key and material.file_key.startswith("academic/"):
             storage_service.delete_file(material.file_key)
 
         repo.delete(material)
@@ -732,7 +793,7 @@ class AcademicService:
                 raise PermissionError("Material no disponible")
 
         url = storage_service.generate_presigned_url(material.file_key, inline=True)
-        return {"url": url}
+        return {"url": url, "file_name": material.file_name}
 
     def get_material_download_url(
         self,

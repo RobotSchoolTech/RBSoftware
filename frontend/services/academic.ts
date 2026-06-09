@@ -213,6 +213,16 @@ export function addMaterial(
   )
 }
 
+export function addMaterialFromRepository(
+  unitId: string,
+  data: { title: string; file_id: string },
+) {
+  return api.post<MaterialRead>(
+    `/academic/units/${unitId}/materials/from-repository`,
+    data,
+  )
+}
+
 // ── Assignments ──────────────────────────────────────────────────────────────
 
 export function listAssignments(unitId: string) {

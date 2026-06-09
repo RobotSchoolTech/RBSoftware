@@ -10,7 +10,7 @@ from sqlmodel import SQLModel
 
 class MaterialCreate(SQLModel):
     title: str
-    type: Literal['TEXT', 'PDF', 'LINK', 'VIDEO']
+    type: Literal['TEXT', 'PDF', 'LINK', 'VIDEO', 'FILE']
     content: str | None = None
     order_index: int = 0
     is_published: bool = False
@@ -21,9 +21,10 @@ class MaterialRead(SQLModel):
 
     public_id: UUID
     title: str
-    type: Literal['TEXT', 'PDF', 'LINK', 'VIDEO']
+    type: Literal['TEXT', 'PDF', 'LINK', 'VIDEO', 'FILE']
     content: str | None
     has_file: bool = False
+    file_name: str | None = None
     order_index: int
     is_published: bool
     created_at: datetime
@@ -47,6 +48,7 @@ class MaterialRead(SQLModel):
                 type=data.type,
                 content=data.content,
                 has_file=bool(file_key),
+                file_name=getattr(data, 'file_name', None),
                 order_index=data.order_index,
                 is_published=data.is_published,
                 created_at=data.created_at,
@@ -57,7 +59,7 @@ class MaterialRead(SQLModel):
 
 class MaterialUpdate(SQLModel):
     title: str | None = None
-    type: Literal['TEXT', 'PDF', 'LINK', 'VIDEO'] | None = None
+    type: Literal['TEXT', 'PDF', 'LINK', 'VIDEO', 'FILE'] | None = None
     content: str | None = None
     order_index: int | None = None
     is_published: bool | None = None

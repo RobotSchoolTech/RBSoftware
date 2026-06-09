@@ -1,10 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { FolderOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import * as academicService from '@/services/academic'
+import {
+  RepositoryPickerModal,
+  type RepoPickerFile,
+} from '@/components/repository/RepositoryPickerModal'
 
 interface Props {
   unitId: string
@@ -12,33 +16,61 @@ interface Props {
   onCreated: () => void
 }
 
-const TYPES = ['PDF', 'VIDEO', 'LINK', 'TEXT'] as const
+// 'REPO' no es un tipo real de material: dispara el flujo "tomar del
+// repositorio". El backend deduce el tipo final (PDF o FILE) por la extensión.
+const TYPE_OPTIONS = [
+  { value: 'REPO', label: 'Desde repositorio' },
+  { value: 'PDF', label: 'PDF (subir archivo)' },
+  { value: 'VIDEO', label: 'Video (URL)' },
+  { value: 'LINK', label: 'Enlace' },
+  { value: 'TEXT', label: 'Texto' },
+] as const
 
 export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
   const [title, setTitle] = useState('')
-  const [type, setType] = useState<string>('TEXT')
+  const [type, setType] = useState<string>('REPO')
   const [content, setContent] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [repoFile, setRepoFile] = useState<RepoPickerFile | null>(null)
+  const [showPicker, setShowPicker] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function handlePickRepoFile(picked: RepoPickerFile) {
+    setRepoFile(picked)
+    if (!title.trim()) setTitle(picked.name)
+    setShowPicker(false)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setSaving(true)
     try {
-      await academicService.addMaterial(
-        unitId,
-        {
+      if (type === 'REPO') {
+        if (!repoFile) {
+          setError('Selecciona un archivo del repositorio')
+          setSaving(false)
+          return
+        }
+        await academicService.addMaterialFromRepository(unitId, {
           title: title.trim(),
-          type,
-          content:
-            type === 'TEXT' || type === 'VIDEO' || type === 'LINK'
-              ? content.trim() || null
-              : null,
-        },
-        type === 'PDF' && file ? file : undefined,
-      )
+          file_id: repoFile.public_id,
+        })
+      } else {
+        await academicService.addMaterial(
+          unitId,
+          {
+            title: title.trim(),
+            type,
+            content:
+              type === 'TEXT' || type === 'VIDEO' || type === 'LINK'
+                ? content.trim() || null
+                : null,
+          },
+          type === 'PDF' && file ? file : undefined,
+        )
+      }
       onCreated()
     } catch (err: any) {
       setError(err?.detail ?? 'Error al agregar material')
@@ -49,6 +81,12 @@ export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      {showPicker && (
+        <RepositoryPickerModal
+          onClose={() => setShowPicker(false)}
+          onSelect={handlePickRepoFile}
+        />
+      )}
       <div className="w-full max-w-md rounded-lg border bg-card shadow-xl">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <h3 className="font-semibold">Agregar material</h3>
@@ -64,13 +102,14 @@ export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
               onChange={(e) => setType(e.target.value)}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-              {TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {TYPE_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
                 </option>
               ))}
             </select>
           </div>
+
           <div className="space-y-1">
             <label className="text-xs font-medium">Título *</label>
             <Input
@@ -80,6 +119,41 @@ export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
+
+          {type === 'REPO' && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Archivo del repositorio</label>
+              {repoFile ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+                  <span className="min-w-0 truncate">
+                    {repoFile.name}
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({repoFile.file_name})
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPicker(true)}
+                    className="shrink-0 text-xs text-primary hover:underline"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setShowPicker(true)}
+                >
+                  <FolderOpen size={14} />
+                  <span className="ml-2">Elegir del repositorio</span>
+                </Button>
+              )}
+            </div>
+          )}
+
           {type === 'PDF' && (
             <div className="space-y-1">
               <label className="text-xs font-medium">Archivo PDF</label>
@@ -91,6 +165,7 @@ export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
               />
             </div>
           )}
+
           {(type === 'VIDEO' || type === 'LINK') && (
             <div className="space-y-1">
               <label className="text-xs font-medium">URL</label>

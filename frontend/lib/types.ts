@@ -323,6 +323,7 @@ export interface MaterialRead {
   content: string | null
   file_key: string | null
   has_file: boolean
+  file_name: string | null
   order_index: number
   is_published: boolean
   created_at: string
