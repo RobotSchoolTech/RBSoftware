@@ -3,16 +3,12 @@ from fastapi import APIRouter
 from app.api.routes.health import router as health_router
 from app.domains.audit.routes import audit_router
 from app.domains.auth.routes import auth_router, portal_admin_router, sso_router, users_router
-from app.domains.catalog.routes import catalog_router
-from app.domains.commercial.routes import commercial_router
-from app.domains.fulfillment.routes import fulfillment_router
-from app.domains.integrations.routes import integrations_router
-from app.domains.production.routes import production_router
-from app.domains.inventory.routes import (
-    inventory_components_router,
-    inventory_locations_router,
-    inventory_router,
-)
+# NOTA (2026-06-09): dominios de comercio/inventario DESMONTADOS.
+# RBSoftware es un LMS (educación); pedidos/inventario viven en `robotschool_inventory`.
+# catalog, commercial, fulfillment, integrations (webhook WooCommerce SIN auth),
+# production e inventory eran código abandonado pero expuesto (0 tráfico en prod).
+# El código sigue en app/domains/ pendiente de borrado en un PR aparte.
+# Ver vault: [[RobotSchool - RBSoftware LMS Deploy]].
 from app.domains.academic.routes.schools import router as schools_router
 from app.domains.academic.routes.grades import router as grades_router
 from app.domains.academic.routes.courses import router as courses_router
@@ -42,14 +38,6 @@ api_router.include_router(roles_router)
 api_router.include_router(permissions_router)
 api_router.include_router(user_roles_router)
 api_router.include_router(audit_router)
-api_router.include_router(catalog_router)
-api_router.include_router(commercial_router)
-api_router.include_router(production_router)
-api_router.include_router(inventory_locations_router)
-api_router.include_router(inventory_router)
-api_router.include_router(inventory_components_router)
-api_router.include_router(fulfillment_router)
-api_router.include_router(integrations_router)
 api_router.include_router(schools_router)
 api_router.include_router(grades_router)
 api_router.include_router(courses_router)
