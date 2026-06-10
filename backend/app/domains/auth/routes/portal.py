@@ -16,6 +16,7 @@ from app.core.security import hash_password
 from app.domains.academic.models.lms_grade import LmsGrade
 from app.domains.academic.repositories.course_repository import CourseRepository
 from app.domains.academic.repositories.course_student_repository import CourseStudentRepository
+from app.domains.academic.repositories.grade_repository import GradeRepository
 from app.domains.academic.repositories.school_repository import SchoolRepository
 from app.domains.auth.models import User
 from app.domains.auth.schemas import UserCreate
@@ -62,6 +63,24 @@ def list_schools_for_portal(
     }
 
 
+@router.get("/schools/{school_public_id}/grades")
+def list_grades_for_portal(
+    school_public_id: UUID,
+    session: Session = Depends(get_session),
+    _: None = Depends(_verify_service_token),
+) -> dict:
+    school = SchoolRepository(session).get_by_public_id(school_public_id)
+    if school is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "School not found")
+    grades = GradeRepository(session).list_by_school(school.id)
+    return {
+        "grades": [
+            {"public_id": str(g.public_id), "name": g.name}
+            for g in grades if g.is_active
+        ]
+    }
+
+
 @router.get("/schools/{school_public_id}/courses")
 def list_courses_for_portal(
     school_public_id: UUID,
@@ -97,6 +116,7 @@ class UsersSyncRequest(BaseModel):
     name: str | None = None
     role: str | None = None
     course_public_id: str | None = None
+    grade_public_id: str | None = None
 
 
 @router.post("/users-sync")
@@ -159,6 +179,15 @@ def _handle_upsert(session: Session, body: UsersSyncRequest) -> dict:
             course = CourseRepository(session).get_by_public_id(UUID(body.course_public_id))
             if course:
                 CourseStudentRepository(session).enroll(course.id, user.id)
+        except Exception:
+            pass
+    elif body.grade_public_id:
+        try:
+            grade = GradeRepository(session).get_by_public_id(UUID(body.grade_public_id))
+            if grade:
+                courses = CourseRepository(session).list_by_grade(grade.id)
+                if courses:
+                    CourseStudentRepository(session).enroll(courses[0].id, user.id)
         except Exception:
             pass
 
