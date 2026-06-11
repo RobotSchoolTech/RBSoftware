@@ -392,8 +392,12 @@ def create_folder_share(
     else:  # school
         if not data.school_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta school_id")
+        try:
+            school_uuid = uuid_module.UUID(data.school_id)
+        except (ValueError, TypeError):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "school_id inválido")
         school = session.exec(
-            select(School).where(School.public_id == data.school_id)
+            select(School).where(School.public_id == school_uuid)
         ).first()
         if school is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Colegio no encontrado")
