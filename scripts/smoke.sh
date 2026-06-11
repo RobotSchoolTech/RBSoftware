@@ -15,10 +15,11 @@ EMAIL="${LMS_EMAIL:?Variable LMS_EMAIL no definida}"
 PASSWORD="${LMS_PASSWORD:?Variable LMS_PASSWORD no definida}"
 
 COOKIE_JAR=$(mktemp)
+BODY_TMP=$(mktemp)
 PASS=0
 FAIL=0
 
-cleanup() { rm -f "$COOKIE_JAR"; }
+cleanup() { rm -f "$COOKIE_JAR" "$BODY_TMP"; }
 trap cleanup EXIT
 
 ok() {
@@ -31,8 +32,7 @@ fail() {
     FAIL=$((FAIL + 1))
 }
 
-# Hace GET/POST con cookies y devuelve el código HTTP.
-# Uso: http_code <label> <expected> <method> <url> [extra curl args...]
+# http_check <label> <expected_code> <method> <url> [curl_args...]
 http_check() {
     local label="$1" expected="$2" method="$3" url="$4"
     shift 4
@@ -40,52 +40,41 @@ http_check() {
     status=$(curl -sS -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
         -o /dev/null -w '%{http_code}' \
         -X "$method" "$@" "$url")
-    if [[ "$status" == "$expected" ]]; then
-        ok "$label"
-    else
-        fail "$label" "$status"
-    fi
+    if [[ "$status" == "$expected" ]]; then ok "$label"; else fail "$label" "$status"; fi
 }
 
-# Hace una llamada y devuelve el body (stdout) además de validar el código HTTP.
-http_body() {
+# http_fetch <label> <expected_code> <method> <url> [curl_args...]
+# Igual que http_check pero guarda el body en $BODY_TMP para lectura posterior.
+http_fetch() {
     local label="$1" expected="$2" method="$3" url="$4"
     shift 4
-    local tmp; tmp=$(mktemp)
     local status
     status=$(curl -sS -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
-        -o "$tmp" -w '%{http_code}' \
+        -o "$BODY_TMP" -w '%{http_code}' \
         -X "$method" "$@" "$url")
-    local body; body=$(cat "$tmp"); rm -f "$tmp"
-    if [[ "$status" == "$expected" ]]; then
-        ok "$label"
-    else
-        fail "$label" "$status"
-    fi
-    echo "$body"
+    if [[ "$status" == "$expected" ]]; then ok "$label"; else fail "$label" "$status"; fi
 }
 
 echo "=== LMS Smoke Test — $BASE ==="
 echo ""
 
-# ── 1. Health ───────────────────────────────────────────────────────────────
+# ── 1. Health ────────────────────────────────────────────────────────────────
 echo "[ Infraestructura ]"
 http_check "GET /health" "200" "GET" "$BASE/api/health"
 
-# ── 2. Login ─────────────────────────────────────────────────────────────────
+# ── 2. Autenticación ─────────────────────────────────────────────────────────
 echo ""
 echo "[ Autenticación ]"
-LOGIN_BODY=$(http_body "POST /auth/login" "200" "POST" "$BASE/api/auth/login" \
+http_check "POST /auth/login" "200" "POST" "$BASE/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
-
+    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}"
 http_check "GET /auth/me" "200" "GET" "$BASE/api/auth/me"
 
 # ── 3. Datos académicos ───────────────────────────────────────────────────────
 echo ""
 echo "[ Datos académicos ]"
-http_check "GET /schools"  "200" "GET" "$BASE/api/schools"
-http_check "GET /courses"  "200" "GET" "$BASE/api/courses"
+http_check "GET /academic/schools"  "200" "GET" "$BASE/api/academic/schools"
+http_check "GET /academic/courses"  "200" "GET" "$BASE/api/academic/courses"
 
 # ── 4. Usuarios ───────────────────────────────────────────────────────────────
 echo ""
@@ -97,27 +86,29 @@ echo ""
 echo "[ Training ]"
 http_check "GET /training/programs" "200" "GET" "$BASE/api/training/programs"
 
-# ── 6. Repositorio ─────────────────────────────────────────────────────────
+# ── 6. Repositorio ────────────────────────────────────────────────────────────
 echo ""
 echo "[ Repositorio ]"
-FOLDERS_BODY=$(http_body "GET /repository/folders" "200" "GET" "$BASE/api/repository/folders")
+http_fetch "GET /repository/folders" "200" "GET" "$BASE/api/repository/folders"
+FOLDERS_BODY=$(cat "$BODY_TMP")
 http_check "GET /repository/share-options" "200" "GET" "$BASE/api/repository/share-options"
 
-# ── 7. Crear y borrar share (el bug original) ─────────────────────────────────
+# ── 7. Crear y borrar share (regresión del bug original) ─────────────────────
 echo ""
 echo "[ Share create/delete — bug regression ]"
 FOLDER_ID=$(echo "$FOLDERS_BODY" | jq -r 'first | .public_id // empty' 2>/dev/null || true)
-SCHOOL_ID=$(curl -sS -b "$COOKIE_JAR" "$BASE/api/schools" \
-    | jq -r 'first | .public_id // empty' 2>/dev/null || true)
+
+http_fetch "" "200" "GET" "$BASE/api/academic/schools" 2>/dev/null || true
+SCHOOL_ID=$(cat "$BODY_TMP" | jq -r 'first | .public_id // empty' 2>/dev/null || true)
 
 if [[ -z "$FOLDER_ID" || -z "$SCHOOL_ID" ]]; then
     echo "  ! share create/delete omitido — sin carpetas o colegios en la BD"
 else
-    SHARE_BODY=$(http_body "POST /repository/folders/{id}/shares" "201" "POST" \
+    http_fetch "POST /repository/folders/{id}/shares" "201" "POST" \
         "$BASE/api/repository/folders/$FOLDER_ID/shares" \
         -H "Content-Type: application/json" \
-        -d "{\"scope_type\":\"school\",\"scope_id\":\"$SCHOOL_ID\"}")
-    SHARE_ID=$(echo "$SHARE_BODY" | jq -r '.id // empty' 2>/dev/null || true)
+        -d "{\"scope_type\":\"school\",\"scope_id\":\"$SCHOOL_ID\"}"
+    SHARE_ID=$(cat "$BODY_TMP" | jq -r '.id // empty' 2>/dev/null || true)
     if [[ -n "$SHARE_ID" ]]; then
         http_check "DELETE /repository/folders/{id}/shares/{id}" "204" "DELETE" \
             "$BASE/api/repository/folders/$FOLDER_ID/shares/$SHARE_ID"
