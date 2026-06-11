@@ -73,8 +73,8 @@ http_check "GET /auth/me" "200" "GET" "$BASE/api/auth/me"
 # ── 3. Datos académicos ───────────────────────────────────────────────────────
 echo ""
 echo "[ Datos académicos ]"
-http_check "GET /academic/schools"  "200" "GET" "$BASE/api/academic/schools"
-http_check "GET /academic/courses"  "200" "GET" "$BASE/api/academic/courses"
+http_check "GET /academic/schools"   "200" "GET" "$BASE/api/academic/schools"
+http_check "GET /academic/my-courses" "200" "GET" "$BASE/api/academic/my-courses"
 
 # ── 4. Usuarios ───────────────────────────────────────────────────────────────
 echo ""
@@ -107,7 +107,7 @@ else
     http_fetch "POST /repository/folders/{id}/shares" "201" "POST" \
         "$BASE/api/repository/folders/$FOLDER_ID/shares" \
         -H "Content-Type: application/json" \
-        -d "{\"scope_type\":\"school\",\"scope_id\":\"$SCHOOL_ID\"}"
+        -d "{\"scope_type\":\"school\",\"school_id\":\"$SCHOOL_ID\"}"
     SHARE_ID=$(cat "$BODY_TMP" | jq -r '.id // empty' 2>/dev/null || true)
     if [[ -n "$SHARE_ID" ]]; then
         http_check "DELETE /repository/folders/{id}/shares/{id}" "204" "DELETE" \
