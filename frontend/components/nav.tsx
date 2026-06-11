@@ -13,12 +13,10 @@ import {
   ChevronRight,
   ClipboardList,
   FolderOpen,
-  GraduationCap,
   Layers,
   LayoutDashboard,
   LogOut,
   Moon,
-  Plug,
   Shield,
   Sun,
   Users2,
@@ -87,13 +85,6 @@ export function Nav() {
       items: [
         { href: '/settings/users', label: 'Usuarios',         icon: Users2, visible: () => isAdmin() },
         { href: '/settings/roles', label: 'Roles y Permisos', icon: Shield, visible: () => isAdmin() },
-      ],
-    },
-    {
-      title: 'Próximamente',
-      items: [
-        { href: '#', label: 'Administrativo', icon: GraduationCap, soon: true, disabled: true },
-        { href: '#', label: 'Integraciones',  icon: Plug,          soon: true, disabled: true },
       ],
     },
   ]
