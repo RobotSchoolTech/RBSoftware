@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     minio_bucket: str = "rbsoftware"
     minio_use_ssl: bool = False
 
+    # Email / SMTP
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "noreply@miel-robotschool.com"
+    smtp_from_name: str = "RobotSchool"
+    frontend_base_url: str = "https://lms.miel-robotschool.com"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -7,6 +7,7 @@ from sqlalchemy.types import Uuid
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from app.domains.auth.models.password_reset_token import PasswordResetToken
     from app.domains.auth.models.refresh_token import RefreshToken
 
 
@@ -40,3 +41,4 @@ class User(SQLModel, table=True):
     )
 
     refresh_tokens: list["RefreshToken"] = Relationship(back_populates="user")
+    password_reset_tokens: list["PasswordResetToken"] = Relationship(back_populates="user")
