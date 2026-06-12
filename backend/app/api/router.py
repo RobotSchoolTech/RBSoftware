@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes.health import router as health_router
 from app.domains.audit.routes import audit_router
-from app.domains.auth.routes import auth_router, portal_admin_router, sso_router, users_router
+from app.domains.auth.routes import auth_router, password_reset_router, portal_admin_router, sso_router, users_router
 # NOTA (2026-06-09): dominios de comercio/inventario DESMONTADOS.
 # RBSoftware es un LMS (educación); pedidos/inventario viven en `robotschool_inventory`.
 # catalog, commercial, fulfillment, integrations (webhook WooCommerce SIN auth),
@@ -34,6 +34,7 @@ api_router.include_router(auth_router)
 api_router.include_router(sso_router)
 api_router.include_router(portal_admin_router)
 api_router.include_router(users_router)
+api_router.include_router(password_reset_router)
 api_router.include_router(roles_router)
 api_router.include_router(permissions_router)
 api_router.include_router(user_roles_router)
