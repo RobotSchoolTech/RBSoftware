@@ -121,8 +121,8 @@ function getFileIcon(fileType: string | null) {
   if (['ppt', 'pptx'].includes(t)) return <FileText className="h-5 w-5 text-orange-500" />
   if (['xls', 'xlsx'].includes(t)) return <FileSpreadsheet className="h-5 w-5 text-green-600" />
   if (['png', 'jpg', 'jpeg', 'gif'].includes(t)) return <FileImage className="h-5 w-5 text-purple-500" />
-  if (['mp4', 'mov', 'avi'].includes(t)) return <FileVideo className="h-5 w-5 text-indigo-500" />
-  return <File className="h-5 w-5 text-gray-400" />
+  if (['mp4', 'mov', 'avi'].includes(t)) return <FileVideo className="h-5 w-5 text-sky-500" />
+  return <File className="h-5 w-5 text-muted-foreground" />
 }
 
 function isViewable(fileType: string | null): boolean {
@@ -165,16 +165,16 @@ function FolderTreeItem({
           setOpen((v) => !v)
           onSelect(node.folder.public_id)
         }}
-        className={`flex w-full items-center gap-1 rounded px-2 py-1 text-left text-sm transition-colors hover:bg-gray-100 ${
-          isActive ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-gray-700'
+        className={`flex w-full items-center gap-1 rounded px-2 py-1 text-left text-sm transition-colors hover:bg-muted ${
+          isActive ? 'bg-primary/10 font-medium text-primary' : 'text-foreground'
         }`}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
       >
         {hasChildren ? (
           open ? (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           )
         ) : (
           <span className="w-3.5" />
@@ -496,25 +496,25 @@ export default function RepositoryPage() {
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
       {/* Sidebar */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-gray-200 bg-white">
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <span className="text-sm font-semibold text-gray-700">Carpetas</span>
+      <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <span className="text-sm font-semibold text-foreground">Carpetas</span>
           {canManage && (
             <button
               onClick={() => {
                 setActiveFolderId(null)
                 setShowCreateFolder(true)
               }}
-              className="rounded p-1 hover:bg-gray-100"
+              className="rounded p-1 hover:bg-muted"
               title="Nueva carpeta raíz"
             >
-              <FolderPlus className="h-4 w-4 text-gray-500" />
+              <FolderPlus className="h-4 w-4 text-muted-foreground" />
             </button>
           )}
         </div>
         <div className="flex-1 overflow-y-auto py-2">
           {tree.length === 0 && (
-            <p className="px-4 py-6 text-center text-xs text-gray-400">Sin carpetas</p>
+            <p className="px-4 py-6 text-center text-xs text-muted-foreground">Sin carpetas</p>
           )}
           {tree.map((node) => (
             <FolderTreeItem
@@ -529,11 +529,11 @@ export default function RepositoryPage() {
       </aside>
 
       {/* Main */}
-      <main className="flex flex-1 flex-col overflow-hidden bg-gray-50">
+      <main className="flex flex-1 flex-col overflow-hidden bg-background">
         {/* Toolbar */}
-        <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-6 py-3">
+        <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-3">
           <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -541,7 +541,7 @@ export default function RepositoryPage() {
               className="pl-9 text-sm"
             />
             {searching && (
-              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />
+              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
             )}
           </div>
           {canManage && (
@@ -569,13 +569,13 @@ export default function RepositoryPage() {
 
         {/* Breadcrumb */}
         {!searchResults && folderDetail && (
-          <div className="flex items-center gap-1 border-b border-gray-100 bg-white px-6 py-2 text-sm text-gray-500">
+          <div className="flex items-center gap-1 border-b border-border bg-card px-6 py-2 text-sm text-muted-foreground">
             <button
               onClick={() => {
                 setActiveFolderId(null)
                 setFolderDetail(null)
               }}
-              className="hover:text-indigo-600"
+              className="hover:text-primary"
             >
               Inicio
             </button>
@@ -584,7 +584,7 @@ export default function RepositoryPage() {
                 <ChevronRight className="h-3.5 w-3.5" />
                 <button
                   onClick={() => loadFolder(crumb.public_id)}
-                  className="hover:text-indigo-600"
+                  className="hover:text-primary"
                 >
                   {crumb.name}
                 </button>
@@ -594,14 +594,14 @@ export default function RepositoryPage() {
         )}
 
         {searchResults && (
-          <div className="flex items-center gap-2 border-b border-gray-100 bg-white px-6 py-2 text-sm text-gray-500">
+          <div className="flex items-center gap-2 border-b border-border bg-card px-6 py-2 text-sm text-muted-foreground">
             <span>Resultados para &quot;{query}&quot;</span>
             <button
               onClick={() => {
                 setQuery('')
                 setSearchResults(null)
               }}
-              className="ml-2 rounded-full p-0.5 hover:bg-gray-100"
+              className="ml-2 rounded-full p-0.5 hover:bg-muted"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -612,17 +612,17 @@ export default function RepositoryPage() {
         <div className="flex-1 overflow-y-auto p-6">
           {loadingDetail && (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           )}
 
           {!loadingDetail && !activeFolderId && !searchResults && (
             <div className="mb-6">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Carpetas raíz
               </h2>
               {rootFolders.length === 0 ? (
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {canManage ? 'Crea una carpeta para comenzar.' : 'No hay carpetas disponibles.'}
                 </p>
               ) : (
@@ -646,7 +646,7 @@ export default function RepositoryPage() {
             <div className="mb-6">
               {displayFolders.length > 0 && (
                 <>
-                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                     {searchResults ? 'Carpetas' : 'Subcarpetas'}
                   </h2>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -668,10 +668,10 @@ export default function RepositoryPage() {
 
           {!loadingDetail && displayFiles.length > 0 && (
             <div>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 {searchResults ? 'Archivos' : 'Archivos'}
               </h2>
-              <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+              <div className="overflow-hidden rounded-lg border border-border bg-card">
                 {displayFiles.map((file, idx) => (
                   <FileRow
                     key={file.public_id}
@@ -692,7 +692,7 @@ export default function RepositoryPage() {
             activeFolderId &&
             displayFolders.length === 0 &&
             displayFiles.length === 0 && (
-              <p className="mt-8 text-center text-sm text-gray-400">Carpeta vacía</p>
+              <p className="mt-8 text-center text-sm text-muted-foreground">Carpeta vacía</p>
             )}
         </div>
       </main>
@@ -700,11 +700,11 @@ export default function RepositoryPage() {
       {/* Create folder modal */}
       {showCreateFolder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">Nueva carpeta</h3>
+              <h3 className="font-semibold text-foreground">Nueva carpeta</h3>
               <button onClick={() => setShowCreateFolder(false)}>
-                <X className="h-5 w-5 text-gray-400" />
+                <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
             <div className="space-y-3">
@@ -720,7 +720,7 @@ export default function RepositoryPage() {
                 placeholder="Descripción (opcional)"
               />
               {activeFolderId && folderDetail && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   Dentro de: <span className="font-medium">{folderDetail.name}</span>
                 </p>
               )}
@@ -745,16 +745,16 @@ export default function RepositoryPage() {
       {/* Upload file modal */}
       {showUpload && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">Subir archivo</h3>
+              <h3 className="font-semibold text-foreground">Subir archivo</h3>
               <button onClick={() => setShowUpload(false)}>
-                <X className="h-5 w-5 text-gray-400" />
+                <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-gray-600">Archivo</span>
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Archivo</span>
                 <input
                   type="file"
                   accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.mp4,.mov,.avi"
@@ -763,7 +763,7 @@ export default function RepositoryPage() {
                     setUploadFile(f)
                     if (f && !uploadName) setUploadName(f.name.replace(/\.[^.]+$/, ''))
                   }}
-                  className="block w-full text-sm text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-indigo-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+                  className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
                 />
               </label>
               <Input
@@ -777,7 +777,7 @@ export default function RepositoryPage() {
                 placeholder="Descripción (opcional)"
               />
               {activeFolderId && folderDetail && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   En: <span className="font-medium">{folderDetail.name}</span>
                 </p>
               )}
@@ -811,28 +811,28 @@ export default function RepositoryPage() {
       {/* Share folder modal */}
       {shareFolder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-xl bg-card p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-gray-800">Compartir carpeta</h3>
-                <p className="mt-0.5 text-xs text-gray-500">{shareFolder.name}</p>
+                <h3 className="font-semibold text-foreground">Compartir carpeta</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">{shareFolder.name}</p>
               </div>
               <button onClick={() => setShareFolder(null)}>
-                <X className="h-5 w-5 text-gray-400" />
+                <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
             {shareLoading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
               <>
                 <div className="mb-4">
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Compartida con
                   </p>
                   {shareList.length === 0 ? (
-                    <p className="flex items-center gap-1.5 text-sm text-gray-400">
+                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                       <Lock className="h-3.5 w-3.5" />
                       Privada — solo tú y los administradores la ven.
                     </p>
@@ -841,7 +841,7 @@ export default function RepositoryPage() {
                       {shareList.map((share) => (
                         <span
                           key={share.id}
-                          className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700"
+                          className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
                         >
                           {share.scope_type === 'work_line'
                             ? (WORK_LINE_LABELS[share.work_line ?? ''] ?? share.work_line)
@@ -849,7 +849,7 @@ export default function RepositoryPage() {
                           <button
                             onClick={() => handleRemoveShare(share.id)}
                             disabled={shareSaving}
-                            className="ml-0.5 rounded-full p-0.5 hover:bg-indigo-100 disabled:opacity-50"
+                            className="ml-0.5 rounded-full p-0.5 hover:bg-primary/20 disabled:opacity-50"
                           >
                             <X className="h-2.5 w-2.5" />
                           </button>
@@ -904,8 +904,8 @@ function AddShareForm({
   }
 
   return (
-    <div className="border-t border-gray-100 pt-4">
-      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-500">
+    <div className="border-t border-border pt-4">
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Agregar acceso
       </p>
       <div className="mb-3 flex gap-2">
@@ -919,8 +919,8 @@ function AddShareForm({
             }}
             className={`rounded-full border px-3 py-1 text-xs transition-colors ${
               scopeType === type
-                ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                : 'border-gray-200 text-gray-600 hover:border-indigo-300'
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border text-muted-foreground hover:border-primary'
             }`}
           >
             {type === 'work_line' ? 'Línea de trabajo' : 'Colegio'}
@@ -935,8 +935,8 @@ function AddShareForm({
               onClick={() => setWorkLine(wl === workLine ? '' : wl)}
               className={`rounded border px-3 py-1.5 text-xs transition-colors ${
                 workLine === wl
-                  ? 'border-indigo-600 bg-indigo-600 text-white'
-                  : 'border-gray-200 text-gray-600 hover:border-indigo-300'
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-border text-muted-foreground hover:border-primary'
               }`}
             >
               {WORK_LINE_LABELS[wl] ?? wl}
@@ -947,7 +947,7 @@ function AddShareForm({
         <select
           value={schoolId}
           onChange={(e) => setSchoolId(e.target.value)}
-          className="w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none"
+          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
         >
           <option value="">Seleccionar colegio...</option>
           {shareOptions?.schools.map((s) => (
@@ -988,14 +988,14 @@ function FolderCard({
   onShare?: () => void
 }) {
   return (
-    <div className="group relative flex flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+    <div className="group relative flex flex-col rounded-lg border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
       <button onClick={onOpen} className="flex flex-col items-start gap-2 text-left">
         <div className="flex items-center gap-2">
           <Folder className="h-8 w-8 text-amber-400" />
-          {folder.shares.length === 0 && <Lock className="h-3 w-3 text-gray-300" />}
+          {folder.shares.length === 0 && <Lock className="h-3 w-3 text-muted-foreground" />}
         </div>
-        <span className="line-clamp-2 text-sm font-medium text-gray-800">{folder.name}</span>
-        <span className="text-xs text-gray-400">
+        <span className="line-clamp-2 text-sm font-medium text-foreground">{folder.name}</span>
+        <span className="text-xs text-muted-foreground">
           {folder.subfolder_count} subcarpetas · {folder.file_count} archivos
         </span>
         {folder.shares.length > 0 && (
@@ -1003,7 +1003,7 @@ function FolderCard({
             {folder.shares.map((s) => (
               <span
                 key={s.id}
-                className="inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600"
+                className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary"
               >
                 {s.scope_type === 'work_line'
                   ? (WORK_LINE_LABELS[s.work_line ?? ''] ?? s.work_line)
@@ -1018,18 +1018,18 @@ function FolderCard({
           {onShare && (
             <button
               onClick={(e) => { e.stopPropagation(); onShare() }}
-              className="rounded p-1 hover:bg-indigo-50"
+              className="rounded p-1 hover:bg-primary/10"
               title="Compartir"
             >
-              <Users className="h-3.5 w-3.5 text-indigo-400" />
+              <Users className="h-3.5 w-3.5 text-primary" />
             </button>
           )}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="rounded p-1 hover:bg-red-50"
+            className="rounded p-1 hover:bg-destructive/10"
             title="Eliminar"
           >
-            <Trash2 className="h-3.5 w-3.5 text-red-400" />
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
           </button>
         </div>
       )}
@@ -1056,12 +1056,12 @@ function FileRow({
 }) {
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-3 ${!isLast ? 'border-b border-gray-100' : ''}`}
+      className={`flex items-center gap-3 px-4 py-3 ${!isLast ? 'border-b border-border' : ''}`}
     >
       <div className="shrink-0">{getFileIcon(file.file_type)}</div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-gray-800">{file.name}</p>
-        <p className="text-xs text-gray-400">
+        <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
+        <p className="text-xs text-muted-foreground">
           {file.file_name}
           {file.file_size ? ` · ${formatSize(file.file_size)}` : ''}
           {file.uploaded_by_name ? ` · ${file.uploaded_by_name}` : ''}
@@ -1071,7 +1071,7 @@ function FileRow({
         {isViewable(file.file_type) && (
           <button
             onClick={onView}
-            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-indigo-600"
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-primary"
             title="Ver"
           >
             <Eye className="h-4 w-4" />
@@ -1079,7 +1079,7 @@ function FileRow({
         )}
         <button
           onClick={onDownload}
-          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-indigo-600"
+          className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-primary"
           title="Descargar"
         >
           <Download className="h-4 w-4" />
@@ -1087,7 +1087,7 @@ function FileRow({
         {canManage && (
           <button
             onClick={onDelete}
-            className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"
+            className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             title="Eliminar"
           >
             <Trash2 className="h-4 w-4" />
