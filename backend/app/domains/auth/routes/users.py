@@ -14,14 +14,11 @@ from app.core.permissions import require_roles
 from app.domains.academic.models.lms_course import LmsCourse
 from app.domains.academic.models.lms_course_student import LmsCourseStudent
 from app.domains.academic.models.lms_grade_director import LmsGradeDirector
-from app.core.config import settings
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
 from app.domains.auth.repositories import UserRepository
-from app.domains.auth.routes.password_reset import _issue_token
 from app.domains.auth.schemas import UserRead
 from app.domains.auth.services.user_service import UserService
-from app.domains.email.email_service import EmailService
 from app.domains.rbac.repositories.user_role_repository import UserRoleRepository
 
 router = APIRouter(prefix="/auth/users", tags=["auth"])
@@ -283,38 +280,6 @@ def change_password(
         ip=request.client.host if request.client else None,
     )
     return {"message": "Password updated"}
-
-
-@router.post("/{user_id}/send-credentials", status_code=status.HTTP_200_OK)
-async def send_credentials(
-    user_id: UUID,
-    request: Request,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(require_roles("ADMIN")),
-) -> dict[str, str]:
-    user = UserRepository(session).get_by_public_id(user_id)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
-
-    raw_token = _issue_token(session, user)
-    reset_link = f"{settings.frontend_base_url}/set-password?token={raw_token}"
-
-    await EmailService().send_credentials(
-        to_email=user.email,
-        first_name=user.first_name,
-        username=user.email,
-        reset_link=reset_link,
-    )
-
-    _audit.log(
-        session,
-        user_id=current_user.id,
-        action="user.credentials_sent",
-        resource_type="user",
-        resource_id=str(user_id),
-        ip=request.client.host if request.client else None,
-    )
-    return {"message": f"Credenciales enviadas a {user.email}"}
 
 
 @router.post("/import-csv", status_code=status.HTTP_200_OK)

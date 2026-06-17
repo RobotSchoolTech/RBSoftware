@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Download, Mail, Plus, RefreshCw, Upload, X } from 'lucide-react'
+import { Download, Plus, RefreshCw, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
@@ -44,8 +44,6 @@ function CreateUserModal({
   const [selectedGradeId, setSelectedGradeId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sendCredentials, setSendCredentials] = useState(true)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
   useEffect(() => {
     api.get<Role[]>('/rbac/roles').then(setRoles)
@@ -91,22 +89,12 @@ function CreateUserModal({
       setError('Selecciona el colegio del estudiante')
       return
     }
-    if (!sendCredentials && form.password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres')
-      return
-    }
     setError(null)
     setSaving(true)
     try {
-      // Si se envían credenciales y no hay password, el usuario la establecerá vía
-      // el link del email. Generamos una temporal solo para satisfacer al backend.
-      const effectivePassword =
-        sendCredentials && !form.password
-          ? Math.random().toString(36).slice(-10) + 'A1!'
-          : form.password
       const newUser = await api.post<User>('/auth/users', {
         email: form.email.trim(),
-        password: effectivePassword,
+        password: form.password,
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         phone: form.phone.trim() || null,
@@ -132,17 +120,10 @@ function CreateUserModal({
         })
       }
 
-      if (sendCredentials) {
-        await api.post(`/auth/users/${newUser.public_id}/send-credentials`)
-        setSuccessMsg(`Usuario creado. Credenciales enviadas a ${form.email.trim()}.`)
-        setSaving(false)
-        setTimeout(onCreated, 1800)
-        return
-      }
-
       onCreated()
     } catch (err: any) {
       setError(err?.detail ?? 'Error al crear el usuario')
+    } finally {
       setSaving(false)
     }
   }
@@ -176,17 +157,9 @@ function CreateUserModal({
                 onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium">
-                Contraseña{!sendCredentials && <span className="text-destructive ml-1">*</span>}
-              </label>
-              <Input
-                required={!sendCredentials}
-                type="password"
-                placeholder={sendCredentials ? 'Se define por email' : 'Mínimo 8 caracteres'}
-                disabled={sendCredentials}
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-              />
+              <label className="text-xs font-medium">Contraseña</label>
+              <Input required type="password" placeholder="Mínimo 8 caracteres" value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -298,25 +271,12 @@ function CreateUserModal({
             </div>
           )}
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={sendCredentials}
-              onChange={(e) => setSendCredentials(e.target.checked)}
-              className="h-4 w-4 rounded border-input"
-            />
-            Enviar credenciales por email
-          </label>
-
           {error && (
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           )}
-          {successMsg && (
-            <p className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-600">{successMsg}</p>
-          )}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" size="sm" disabled={saving || !!successMsg}>
+            <Button type="submit" size="sm" disabled={saving}>
               {saving ? 'Creando…' : 'Crear usuario'}
             </Button>
           </div>
@@ -857,8 +817,6 @@ export default function SettingsUsersPage() {
   const [allRoles, setAllRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const [sendingCredsId, setSendingCredsId] = useState<string | null>(null)
-  const [credsFeedback, setCredsFeedback] = useState<{ ok: boolean; text: string } | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
@@ -964,20 +922,6 @@ export default function SettingsUsersPage() {
   function handleCreated() {
     setShowCreate(false)
     load()
-  }
-
-  async function handleSendCredentials(user: User) {
-    setSendingCredsId(user.public_id)
-    setCredsFeedback(null)
-    try {
-      await api.post(`/auth/users/${user.public_id}/send-credentials`)
-      setCredsFeedback({ ok: true, text: `Credenciales enviadas a ${user.email}` })
-    } catch (err: any) {
-      setCredsFeedback({ ok: false, text: err?.detail ?? 'Error al enviar credenciales' })
-    } finally {
-      setSendingCredsId(null)
-      setTimeout(() => setCredsFeedback(null), 4000)
-    }
   }
 
   return (
@@ -1191,20 +1135,19 @@ export default function SettingsUsersPage() {
                   <th className="px-4 py-3 text-left font-medium">Cargo</th>
                   <th className="px-4 py-3 text-left font-medium">Roles</th>
                   <th className="px-4 py-3 text-left font-medium">Activo</th>
-                  <th className="px-4 py-3 text-right font-medium">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                       Cargando…
                     </td>
                   </tr>
                 )}
                 {!loading && users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                       No hay usuarios
                     </td>
                   </tr>
@@ -1247,20 +1190,6 @@ export default function SettingsUsersPage() {
                         {u.is_active ? 'Sí' : 'No'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSendCredentials(u)
-                        }}
-                        disabled={sendingCredsId === u.public_id}
-                        title="Enviar credenciales por email"
-                        className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
-                      >
-                        <Mail size={14} className={sendingCredsId === u.public_id ? 'animate-pulse' : ''} />
-                        {sendingCredsId === u.public_id ? 'Enviando…' : 'Credenciales'}
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1278,18 +1207,6 @@ export default function SettingsUsersPage() {
           />
         )}
       </div>
-
-      {credsFeedback && (
-        <div
-          className={`fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm shadow-lg ${
-            credsFeedback.ok
-              ? 'bg-green-600 text-white'
-              : 'bg-destructive text-destructive-foreground'
-          }`}
-        >
-          {credsFeedback.text}
-        </div>
-      )}
     </>
   )
 }

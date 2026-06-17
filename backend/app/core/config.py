@@ -32,21 +32,6 @@ class Settings(BaseSettings):
     minio_bucket: str = "rbsoftware"
     minio_use_ssl: bool = False
 
-    # Email — envío transaccional vía Microsoft Graph API (client credentials).
-    # El correo se envía como `graph_sender` (buzón con licencia M365). Si
-    # `graph_client_secret` está vacío (dev), el email se loguea en consola en
-    # lugar de enviarse. El App Registration debe tener el permiso de aplicación
-    # Mail.Send con consentimiento de administrador, restringido a `graph_sender`
-    # mediante una Application Access Policy de Exchange Online.
-    graph_tenant_id: str = ""
-    graph_client_id: str = ""
-    graph_client_secret: str = ""
-    graph_sender: str = "soporte@robotschool.com.co"
-    graph_from_name: str = "RobotSchool"
-
-    # Base del frontend para construir los links de los correos (set-password).
-    frontend_base_url: str = "https://lms.miel-robotschool.com"
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
