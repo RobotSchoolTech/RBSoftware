@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ClipboardList,
   FolderOpen,
+  HelpCircle,
   Layers,
   LayoutDashboard,
   LogOut,
@@ -85,6 +86,12 @@ export function Nav() {
       items: [
         { href: '/settings/users', label: 'Usuarios',         icon: Users2, visible: () => isAdmin() },
         { href: '/settings/roles', label: 'Roles y Permisos', icon: Shield, visible: () => isAdmin() },
+      ],
+    },
+    {
+      title: 'Soporte',
+      items: [
+        { href: '/ayuda', label: 'Ayuda', icon: HelpCircle },
       ],
     },
   ]
