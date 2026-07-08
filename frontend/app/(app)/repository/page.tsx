@@ -65,9 +65,13 @@ interface ShareOptions {
 }
 
 const WORK_LINE_LABELS: Record<string, string> = {
+  kuntur: 'Kuntur estándar',
+  kuntur_abierto: 'Kuntur abierto',
+  ecua: 'Ecua 1',
+  ecua_2: 'Ecua 2',
+  ecua_3: 'Ecua 3',
+  ares: 'Ares',
   robotschool: 'RobotSchool',
-  kuntur: 'Kuntur',
-  ecua: 'Ecua',
 }
 
 interface FileRead {

@@ -8,8 +8,12 @@ import * as academicService from '@/services/academic'
 import type { School, WorkLine } from '@/lib/types'
 
 const WORK_LINE_OPTIONS: { value: WorkLine; label: string }[] = [
-  { value: 'kuntur', label: 'Kuntur' },
-  { value: 'ecua', label: 'Ecua' },
+  { value: 'kuntur', label: 'Kuntur estándar' },
+  { value: 'kuntur_abierto', label: 'Kuntur abierto' },
+  { value: 'ecua', label: 'Ecua 1' },
+  { value: 'ecua_2', label: 'Ecua 2' },
+  { value: 'ecua_3', label: 'Ecua 3' },
+  { value: 'ares', label: 'Ares' },
   { value: 'robotschool', label: 'RobotSchool' },
 ]
 

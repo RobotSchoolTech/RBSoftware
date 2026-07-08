@@ -9,7 +9,11 @@ from sqlmodel import Field, SQLModel
 
 class WorkLine(str, Enum):
     kuntur = "kuntur"
+    kuntur_abierto = "kuntur_abierto"
     ecua = "ecua"
+    ecua_2 = "ecua_2"
+    ecua_3 = "ecua_3"
+    ares = "ares"
     robotschool = "robotschool"
 
 
