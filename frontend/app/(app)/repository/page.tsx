@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  AlertCircle,
+  Check,
   ChevronDown,
   ChevronRight,
+  Circle,
   Download,
   Eye,
   File,
@@ -121,6 +124,9 @@ interface SearchResults {
   folders: FolderRead[]
   files: FileRead[]
 }
+
+// Estado de subida de un archivo en modo masivo.
+type UploadStatus = 'queued' | 'uploading' | 'done' | 'error'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -245,10 +251,12 @@ export default function RepositoryPage() {
   const [creatingFolder, setCreatingFolder] = useState(false)
 
   const [showUpload, setShowUpload] = useState(false)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploadName, setUploadName] = useState('')
-  const [uploadDesc, setUploadDesc] = useState('')
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
+  const [uploadName, setUploadName] = useState('') // solo modo single (1 archivo)
+  const [uploadDesc, setUploadDesc] = useState('') // solo modo single (1 archivo)
   const [uploading, setUploading] = useState(false)
+  // Estado por archivo en modo masivo, paralelo a uploadFiles. Vacío = aún no inicia.
+  const [uploadProgress, setUploadProgress] = useState<UploadStatus[]>([])
 
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerUrl, setViewerUrl] = useState<string | null>(null)
@@ -354,46 +362,97 @@ export default function RepositoryPage() {
     }
   }
 
-  // Upload file — presigned PUT directo a MinIO
+  // Cierra el modal de subida y limpia todo su estado.
+  const closeUpload = () => {
+    setShowUpload(false)
+    setUploadFiles([])
+    setUploadName('')
+    setUploadDesc('')
+    setUploadProgress([])
+  }
+
+  // Sube UN archivo: ciclo presign → PUT directo a MinIO → complete en BD.
+  // Lanza si algún paso falla; el llamador decide cómo reportarlo.
+  const uploadOne = async (file: File, name: string, description: string | null) => {
+    // 1. Pedir URL prefirmada al backend
+    const { upload_url, key } = await api.post<{ upload_url: string; key: string }>(
+      '/repository/files/presign',
+      { file_name: file.name, folder_id: activeFolderId ?? null },
+    )
+
+    // 2. Subir el archivo directo a MinIO (sin pasar por el backend)
+    const putRes = await fetch(upload_url, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    })
+    if (!putRes.ok) throw new Error(`PUT MinIO ${putRes.status}`)
+
+    // 3. Registrar el archivo en base de datos
+    await api.post('/repository/files/complete', {
+      name,
+      description,
+      folder_id: activeFolderId ?? null,
+      file_name: file.name,
+      file_size: file.size,
+      content_type: file.type || 'application/octet-stream',
+      key,
+    })
+  }
+
+  // Upload — 1 archivo mantiene nombre/descripción editables; >1 es carga masiva
+  // secuencial, auto-nombrada por filename, con estado por archivo y sin abortar
+  // el lote si uno falla.
   const handleUpload = async () => {
-    if (!uploadFile || !uploadName.trim()) return
+    if (uploadFiles.length === 0) return
+    const isMulti = uploadFiles.length > 1
+
+    // ── Modo single: comportamiento original intacto ──
+    if (!isMulti) {
+      if (!uploadName.trim()) return
+      setUploading(true)
+      try {
+        await uploadOne(uploadFiles[0], uploadName.trim(), uploadDesc.trim() || null)
+        toast({ title: 'Archivo subido', variant: 'success' })
+        closeUpload()
+        if (activeFolderId) await loadFolder(activeFolderId)
+      } catch {
+        toast({ title: 'Error al subir archivo', variant: 'destructive' })
+      } finally {
+        setUploading(false)
+      }
+      return
+    }
+
+    // ── Modo masivo: secuencial, tolerante a fallos parciales ──
     setUploading(true)
-    try {
-      // 1. Pedir URL prefirmada al backend
-      const { upload_url, key } = await api.post<{ upload_url: string; key: string }>(
-        '/repository/files/presign',
-        { file_name: uploadFile.name, folder_id: activeFolderId ?? null },
-      )
-
-      // 2. Subir el archivo directo a MinIO (sin pasar por el backend)
-      const putRes = await fetch(upload_url, {
-        method: 'PUT',
-        body: uploadFile,
-        headers: { 'Content-Type': uploadFile.type || 'application/octet-stream' },
+    setUploadProgress(uploadFiles.map(() => 'queued'))
+    let ok = 0
+    let fail = 0
+    for (let i = 0; i < uploadFiles.length; i++) {
+      setUploadProgress((prev) => prev.map((s, idx) => (idx === i ? 'uploading' : s)))
+      try {
+        const f = uploadFiles[i]
+        // Auto-nombre desde el filename sin extensión (sin descripción en masivo).
+        await uploadOne(f, f.name.replace(/\.[^.]+$/, ''), null)
+        ok++
+        setUploadProgress((prev) => prev.map((s, idx) => (idx === i ? 'done' : s)))
+      } catch {
+        fail++
+        setUploadProgress((prev) => prev.map((s, idx) => (idx === i ? 'error' : s)))
+      }
+    }
+    setUploading(false)
+    if (activeFolderId) await loadFolder(activeFolderId)
+    if (fail === 0) {
+      toast({ title: `${ok} archivos subidos`, variant: 'success' })
+      closeUpload()
+    } else {
+      // Deja el modal abierto para que se vea cuáles fallaron.
+      toast({
+        title: `${ok} subidos, ${fail} fallaron`,
+        variant: ok === 0 ? 'destructive' : 'default',
       })
-      if (!putRes.ok) throw new Error(`PUT MinIO ${putRes.status}`)
-
-      // 3. Registrar el archivo en base de datos
-      await api.post('/repository/files/complete', {
-        name: uploadName.trim(),
-        description: uploadDesc.trim() || null,
-        folder_id: activeFolderId ?? null,
-        file_name: uploadFile.name,
-        file_size: uploadFile.size,
-        content_type: uploadFile.type || 'application/octet-stream',
-        key,
-      })
-
-      toast({ title: 'Archivo subido', variant: 'success' })
-      setShowUpload(false)
-      setUploadFile(null)
-      setUploadName('')
-      setUploadDesc('')
-      if (activeFolderId) await loadFolder(activeFolderId)
-    } catch {
-      toast({ title: 'Error al subir archivo', variant: 'destructive' })
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -770,40 +829,107 @@ export default function RepositoryPage() {
         </div>
       )}
 
-      {/* Upload file modal */}
-      {showUpload && (
+      {/* Upload file modal — single (1 archivo) o masivo (>1) */}
+      {showUpload && (() => {
+        const isMulti = uploadFiles.length > 1
+        const started = uploadProgress.length > 0
+        const finished = started && !uploading
+        const settledCount = uploadProgress.filter((s) => s === 'done' || s === 'error').length
+
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Subir archivo</h3>
-              <button onClick={() => setShowUpload(false)}>
+              <h3 className="font-semibold text-foreground">
+                {isMulti ? `Subir ${uploadFiles.length} archivos` : 'Subir archivo'}
+              </h3>
+              <button onClick={closeUpload} disabled={uploading} className="disabled:opacity-50">
                 <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
             <div className="space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Archivo</span>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.mp4,.mov,.avi"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null
-                    setUploadFile(f)
-                    if (f && !uploadName) setUploadName(f.name.replace(/\.[^.]+$/, ''))
-                  }}
-                  className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
-                />
-              </label>
-              <Input
-                value={uploadName}
-                onChange={(e) => setUploadName(e.target.value)}
-                placeholder="Nombre del archivo"
-              />
-              <Input
-                value={uploadDesc}
-                onChange={(e) => setUploadDesc(e.target.value)}
-                placeholder="Descripción (opcional)"
-              />
+              {/* Selector: oculto una vez que la subida masiva arrancó */}
+              {!started && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                    Archivo(s)
+                  </span>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.mp4,.mov,.avi"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? [])
+                      setUploadFiles(files)
+                      setUploadProgress([])
+                      // El nombre editable solo aplica en modo single.
+                      if (files.length === 1) {
+                        setUploadName(files[0].name.replace(/\.[^.]+$/, ''))
+                      } else {
+                        setUploadName('')
+                        setUploadDesc('')
+                      }
+                    }}
+                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
+                  />
+                </label>
+              )}
+
+              {/* Modo single: nombre + descripción editables */}
+              {!isMulti && (
+                <>
+                  <Input
+                    value={uploadName}
+                    onChange={(e) => setUploadName(e.target.value)}
+                    placeholder="Nombre del archivo"
+                  />
+                  <Input
+                    value={uploadDesc}
+                    onChange={(e) => setUploadDesc(e.target.value)}
+                    placeholder="Descripción (opcional)"
+                  />
+                </>
+              )}
+
+              {/* Modo masivo: lista de archivos con estado por archivo */}
+              {isMulti && (
+                <ul className="max-h-52 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+                  {uploadFiles.map((f, i) => {
+                    const st: UploadStatus = uploadProgress[i] ?? 'queued'
+                    return (
+                      <li key={i} className="flex items-center gap-2 text-sm">
+                        <span className="shrink-0">
+                          {st === 'uploading' ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          ) : st === 'done' ? (
+                            <Check className="h-4 w-4 text-green-600" />
+                          ) : st === 'error' ? (
+                            <AlertCircle className="h-4 w-4 text-destructive" />
+                          ) : (
+                            <Circle className="h-4 w-4 text-muted-foreground/40" />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-foreground">{f.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatSize(f.size)}
+                        </span>
+                        {!started && (
+                          <button
+                            onClick={() =>
+                              setUploadFiles((prev) => prev.filter((_, idx) => idx !== i))
+                            }
+                            className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-muted"
+                            title="Quitar"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+
               {activeFolderId && folderDetail && (
                 <p className="text-xs text-muted-foreground">
                   En: <span className="font-medium">{folderDetail.name}</span>
@@ -811,21 +937,41 @@ export default function RepositoryPage() {
               )}
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowUpload(false)}>
-                Cancelar
+              <Button variant="outline" size="sm" onClick={closeUpload} disabled={uploading}>
+                {finished ? 'Cerrar' : 'Cancelar'}
               </Button>
-              <Button
-                size="sm"
-                onClick={handleUpload}
-                disabled={uploading || !uploadFile || !uploadName.trim()}
-                className="bg-primary hover:bg-primary/90"
-              >
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Subir'}
-              </Button>
+              {!finished && (
+                <Button
+                  size="sm"
+                  onClick={handleUpload}
+                  disabled={
+                    uploading ||
+                    uploadFiles.length === 0 ||
+                    (!isMulti && !uploadName.trim())
+                  }
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  {uploading ? (
+                    isMulti ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Subiendo {settledCount + 1}/{uploadFiles.length}
+                      </span>
+                    ) : (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )
+                  ) : isMulti ? (
+                    `Subir ${uploadFiles.length} archivos`
+                  ) : (
+                    'Subir'
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* File viewer */}
       <FileViewerModal
