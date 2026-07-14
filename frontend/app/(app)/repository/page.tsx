@@ -979,11 +979,13 @@ function AddShareForm({
         <select
           value={schoolId}
           onChange={(e) => setSchoolId(e.target.value)}
-          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
         >
-          <option value="">Seleccionar colegio...</option>
+          <option value="" className="bg-background text-foreground">
+            Seleccionar colegio...
+          </option>
           {shareOptions?.schools.map((s) => (
-            <option key={s.public_id} value={s.public_id}>
+            <option key={s.public_id} value={s.public_id} className="bg-background text-foreground">
               {s.name}
               {s.work_line ? ` · ${WORK_LINE_LABELS[s.work_line] ?? s.work_line}` : ''}
             </option>
