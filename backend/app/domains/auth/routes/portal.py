@@ -18,6 +18,7 @@ from app.domains.academic.repositories.course_repository import CourseRepository
 from app.domains.academic.repositories.course_student_repository import CourseStudentRepository
 from app.domains.academic.repositories.grade_repository import GradeRepository
 from app.domains.academic.repositories.school_repository import SchoolRepository
+from app.domains.academic.repositories.school_teacher_repository import SchoolTeacherRepository
 from app.domains.auth.models import User
 from app.domains.auth.schemas import UserCreate
 from app.domains.rbac.models import Role
@@ -104,6 +105,30 @@ def list_courses_for_portal(
                 "grade_name": grade_map.get(c.grade_id, ""),
             }
             for c in courses
+        ]
+    }
+
+
+@router.get("/schools/{school_public_id}/teachers")
+def list_teachers_for_portal(
+    school_public_id: UUID,
+    session: Session = Depends(get_session),
+    _: None = Depends(_verify_service_token),
+) -> dict:
+    school = SchoolRepository(session).get_by_public_id(school_public_id)
+    if school is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "School not found")
+    teachers = SchoolTeacherRepository(session).list_teachers(school.id)
+    role_repo = UserRoleRepository(session)
+    return {
+        "teachers": [
+            {
+                "public_id": str(u.public_id),
+                "name": f"{u.first_name} {u.last_name}".strip() or u.email,
+                "email": u.email,
+                "roles": role_repo.get_role_names_for_user(u.id),
+            }
+            for u in teachers
         ]
     }
 
