@@ -373,6 +373,33 @@ class AcademicService:
         self._assert_admin_or_director(session, grade.id, user_id)
         return GradeRepository(session).update(grade, data)
 
+    def delete_grade(
+        self, session: Session, grade_id: int, user_id: int
+    ) -> None:
+        grade = GradeRepository(session).get_by_id(grade_id)
+        if grade is None:
+            raise LookupError("Grade not found")
+        # Guarda anti-cascada: el FK lms_courses.grade_id es ON DELETE CASCADE,
+        # así que borrar un grado con cursos arrastraría cursos, estudiantes,
+        # entregas, etc. Solo se permite borrar grados vacíos.
+        courses = session.exec(
+            select(LmsCourse).where(LmsCourse.grade_id == grade.id)
+        ).all()
+        if courses:
+            raise ValueError(
+                "No se puede eliminar un grado que tiene cursos. "
+                "Elimina o reasigna sus cursos primero."
+            )
+        GradeRepository(session).delete(grade)
+        _audit.log(
+            session,
+            user_id=user_id,
+            action="academic.grade.deleted",
+            resource_type="lms_grade",
+            resource_id=str(grade.id),
+            payload={"name": grade.name, "school_id": grade.school_id},
+        )
+
     def list_grade_courses(
         self, session: Session, grade_id: int, user_id: int
     ) -> list[LmsCourse]:

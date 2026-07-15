@@ -76,6 +76,10 @@ export function createGrade(
   )
 }
 
+export function deleteGrade(gradeId: string) {
+  return api.delete(`/academic/grades/${gradeId}`)
+}
+
 export function assignDirector(gradeId: string, userId: string) {
   return api.post(`/academic/grades/${gradeId}/director`, {
     user_id: userId,

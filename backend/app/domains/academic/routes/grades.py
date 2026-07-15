@@ -76,6 +76,23 @@ def update_grade(
     return GradeRead.model_validate(updated)
 
 
+@router.delete("/grades/{grade_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_grade(
+    grade_id: UUID,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_roles("ADMIN")),
+):
+    grade = GradeRepository(session).get_by_public_id(grade_id)
+    if grade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Grade not found")
+    try:
+        _svc.delete_grade(session, grade.id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+
 @router.post("/grades/{grade_id}/director", status_code=status.HTTP_204_NO_CONTENT)
 def assign_director(
     grade_id: UUID,

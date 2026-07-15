@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, BarChart2, Plus, RefreshCw } from 'lucide-react'
+import { ArrowLeft, BarChart2, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useGradeDetail } from '@/hooks/useGradeDetail'
 import type { GradeStudent } from '@/hooks/useGradeDetail'
 import { TransferStudentModal } from './TransferStudentModal'
 import { CreateCourseModal } from './CreateCourseModal'
 import { useAuthStore } from '@/lib/store'
+import { deleteGrade } from '@/services/academic'
 
 interface Props {
   gradeId: string
@@ -23,8 +24,28 @@ export function GradeDetailView({ gradeId }: Props) {
   const [tab, setTab] = useState<Tab>('courses')
   const [transferring, setTransferring] = useState<GradeStudent | null>(null)
   const [showCreateCourse, setShowCreateCourse] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const { isAdmin, hasRole } = useAuthStore()
   const canCreateCourse = isAdmin() || hasRole('DIRECTOR')
+  const isEmpty = courseRows.length === 0 && students.length === 0
+
+  async function handleDelete() {
+    if (!grade) return
+    if (
+      !window.confirm(
+        `¿Eliminar el grado "${grade.name}"? Esta acción no se puede deshacer.`,
+      )
+    )
+      return
+    setDeleting(true)
+    try {
+      await deleteGrade(grade.public_id)
+      router.push('/academic/grades')
+    } catch (err: any) {
+      window.alert(err?.detail ?? 'No se pudo eliminar el grado')
+      setDeleting(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -100,10 +121,26 @@ export function GradeDetailView({ gradeId }: Props) {
                 </p>
               )}
             </div>
-            <Button variant="outline" size="sm" onClick={reload}>
-              <RefreshCw size={14} />
-              <span className="ml-2">Actualizar</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={reload}>
+                <RefreshCw size={14} />
+                <span className="ml-2">Actualizar</span>
+              </Button>
+              {isAdmin() && isEmpty && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 size={14} />
+                  <span className="ml-2">
+                    {deleting ? 'Eliminando…' : 'Eliminar grado'}
+                  </span>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
