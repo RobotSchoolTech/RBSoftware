@@ -298,13 +298,11 @@ class AcademicService:
 
         director_repo = GradeDirectorRepository(session)
 
-        if director_repo.is_director_in_school(grade.school_id, user_id):
-            grades = director_repo.get_grades_for_director(user_id)
-            for g in grades:
-                if g.school_id == grade.school_id and g.id != grade.id:
-                    raise ValueError(
-                        "User is already director of another grade in this school"
-                    )
+        # Un director puede dirigir varios grados, incluso dentro de la misma
+        # escuela: el modelo lo permite (UniqueConstraint sobre el par
+        # grade_id+user_id, no sobre el director) y get_grades_for_director
+        # devuelve una lista. La única invariante es un director *activo* por
+        # grado, que se garantiza abajo desasignando al anterior.
 
         current = director_repo.get_active_director(grade_id)
         if current is not None:
