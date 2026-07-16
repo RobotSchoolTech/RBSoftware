@@ -118,19 +118,24 @@ def list_teachers_for_portal(
     school = SchoolRepository(session).get_by_public_id(school_public_id)
     if school is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "School not found")
-    teachers = SchoolTeacherRepository(session).list_teachers(school.id)
+    # school_teachers es la tabla de MEMBRESÍA al colegio: contiene docentes y
+    # estudiantes. Filtrar por rol TEACHER, igual que AcademicService.
+    members = SchoolTeacherRepository(session).list_teachers(school.id)
     role_repo = UserRoleRepository(session)
-    return {
-        "teachers": [
+    teachers = []
+    for u in members:
+        role_names = role_repo.get_role_names_for_user(u.id)
+        if "TEACHER" not in role_names:
+            continue
+        teachers.append(
             {
                 "public_id": str(u.public_id),
                 "name": f"{u.first_name} {u.last_name}".strip() or u.email,
                 "email": u.email,
-                "roles": role_repo.get_role_names_for_user(u.id),
+                "roles": role_names,
             }
-            for u in teachers
-        ]
-    }
+        )
+    return {"teachers": teachers}
 
 
 class UsersSyncRequest(BaseModel):
