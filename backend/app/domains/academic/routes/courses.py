@@ -100,6 +100,25 @@ def update_course(
     return CourseRead.model_validate(updated)
 
 
+@router.get(
+    "/courses/{course_id}/assignable-teachers", response_model=list[UserRead]
+)
+def list_assignable_teachers(
+    course_id: UUID,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_roles("ADMIN", "DIRECTOR")),
+):
+    course = CourseRepository(session).get_by_public_id(course_id)
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Course not found")
+    try:
+        return _svc.get_assignable_teachers_for_course(
+            session, course.id, current_user.id
+        )
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
+
+
 @router.post("/courses/{course_id}/teacher", status_code=status.HTTP_204_NO_CONTENT)
 def assign_teacher(
     course_id: UUID,

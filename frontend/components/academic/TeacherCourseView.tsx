@@ -9,17 +9,25 @@ import { UnitDetailPanel } from './UnitDetailPanel'
 import { CreateUnitModal } from './CreateUnitModal'
 import { CourseStudentsTab } from './CourseStudentsTab'
 import { GradebookTab } from './GradebookTab'
+import { ChangeTeacherModal } from './ChangeTeacherModal'
 
 interface Props {
   course: CourseDetail
   units: UnitRead[]
   reload: () => void
   canEditContent: boolean
+  canChangeTeacher?: boolean
 }
 
 type CourseTab = 'content' | 'students' | 'gradebook'
 
-export function TeacherCourseView({ course, units, reload, canEditContent }: Props) {
+export function TeacherCourseView({
+  course,
+  units,
+  reload,
+  canEditContent,
+  canChangeTeacher = false,
+}: Props) {
   const router = useRouter()
   const [courseTab, setCourseTab] = useState<CourseTab>(() => {
     if (typeof window === 'undefined') return 'content'
@@ -31,6 +39,7 @@ export function TeacherCourseView({ course, units, reload, canEditContent }: Pro
     units[0]?.public_id ?? null,
   )
   const [showCreateUnit, setShowCreateUnit] = useState(false)
+  const [showChangeTeacher, setShowChangeTeacher] = useState(false)
 
   const selectedUnit = units.find((u) => u.public_id === selectedUnitId) ?? null
 
@@ -53,6 +62,19 @@ export function TeacherCourseView({ course, units, reload, canEditContent }: Pro
         />
       )}
 
+      {showChangeTeacher && (
+        <ChangeTeacherModal
+          courseId={course.public_id}
+          courseName={course.name}
+          currentTeacherId={course.teacher.public_id}
+          onClose={() => setShowChangeTeacher(false)}
+          onChanged={() => {
+            setShowChangeTeacher(false)
+            reload()
+          }}
+        />
+      )}
+
       <div className="flex h-full flex-col">
         <div className="shrink-0 border-b px-4 py-3">
           <button
@@ -64,6 +86,14 @@ export function TeacherCourseView({ course, units, reload, canEditContent }: Pro
           <h1 className="text-lg font-semibold">{course.name}</h1>
           <p className="text-xs text-muted-foreground">
             Docente: {course.teacher.first_name} {course.teacher.last_name}
+            {canChangeTeacher && (
+              <button
+                onClick={() => setShowChangeTeacher(true)}
+                className="ml-1 font-medium text-primary hover:underline"
+              >
+                Cambiar
+              </button>
+            )}
             {' · '}
             {course.students.length} estudiantes
           </p>

@@ -58,6 +58,19 @@ class GradeDirectorRepository:
         )
         return list(self.session.exec(stmt).all())
 
+    def list_directors_in_school(self, school_id: int) -> list[User]:
+        stmt = (
+            select(User)
+            .join(LmsGradeDirector, LmsGradeDirector.user_id == User.id)
+            .join(LmsGrade, LmsGrade.id == LmsGradeDirector.grade_id)
+            .where(
+                LmsGrade.school_id == school_id,
+                LmsGradeDirector.is_active.is_(True),
+            )
+            .distinct()
+        )
+        return list(self.session.exec(stmt).all())
+
     def is_director_of_grade(self, grade_id: int, user_id: int) -> bool:
         record = self._get_record(grade_id, user_id)
         return record is not None and record.is_active

@@ -127,6 +127,14 @@ export function createCourse(
   return api.post<CourseRead>(`/academic/grades/${gradeId}/courses`, data)
 }
 
+export function listAssignableTeachers(courseId: string) {
+  return api.get<User[]>(`/academic/courses/${courseId}/assignable-teachers`)
+}
+
+export function assignCourseTeacher(courseId: string, teacherId: string) {
+  return api.post(`/academic/courses/${courseId}/teacher`, { teacher_id: teacherId })
+}
+
 export function getCourseStudents(courseId: string) {
   return api.get<User[]>(`/academic/courses/${courseId}/students`)
 }

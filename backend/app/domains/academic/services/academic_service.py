@@ -520,6 +520,53 @@ class AcademicService:
         self._assert_admin_or_director(session, course.grade_id, user_id)
         return CourseRepository(session).update(course, data)
 
+    def get_assignable_teachers_for_course(
+        self,
+        session: Session,
+        course_id: int,
+        requesting_user_id: int,
+    ) -> list[UserRead]:
+        """Candidatos a docente de un curso.
+
+        Docentes del colegio + directores del colegio (la misma persona puede
+        coordinar y dictar) + el docente actual, para que el select siempre
+        muestre el valor vigente aunque su cuenta esté desactivada.
+        """
+        course = CourseRepository(session).get_by_id(course_id)
+        if course is None:
+            raise LookupError("Course not found")
+
+        self._assert_admin_or_director(session, course.grade_id, requesting_user_id)
+
+        role_repo = UserRoleRepository(session)
+        candidates: dict[int, User] = {}
+
+        for user in SchoolTeacherRepository(session).list_teachers(course.school_id):
+            if not user.is_active:
+                continue
+            if "TEACHER" in role_repo.get_role_names_for_user(user.id):
+                candidates[user.id] = user
+
+        for user in GradeDirectorRepository(session).list_directors_in_school(
+            course.school_id
+        ):
+            if user.is_active:
+                candidates[user.id] = user
+
+        if course.teacher_id is not None and course.teacher_id not in candidates:
+            current = UserRepository(session).get_by_id(course.teacher_id)
+            if current is not None:
+                candidates[current.id] = current
+
+        return [
+            UserRead.model_validate(u).model_copy(
+                update={"roles": role_repo.get_role_names_for_user(u.id)}
+            )
+            for u in sorted(
+                candidates.values(), key=lambda x: (x.first_name or "", x.last_name or "")
+            )
+        ]
+
     def assign_teacher(
         self,
         session: Session,
