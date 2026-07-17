@@ -248,10 +248,28 @@ export function createAssignment(
     description?: string | null
     due_date?: string | null
     max_score?: number
+    logro?: string | null
   },
 ) {
   return api.post<AssignmentRead>(
     `/academic/units/${unitId}/assignments`,
+    data,
+  )
+}
+
+export function updateAssignment(
+  assignmentId: string,
+  data: {
+    title?: string
+    description?: string | null
+    due_date?: string | null
+    max_score?: number
+    logro?: string | null
+    is_published?: boolean
+  },
+) {
+  return api.patch<AssignmentRead>(
+    `/academic/assignments/${assignmentId}`,
     data,
   )
 }

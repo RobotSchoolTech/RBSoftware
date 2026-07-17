@@ -297,6 +297,7 @@ export interface GradebookAssignment {
   public_id: string
   title: string
   max_score: number
+  logro: string | null
   due_date: string | null
 }
 
@@ -306,9 +307,18 @@ export interface GradebookGrade {
   submission_public_id: string
 }
 
+export interface GradebookLogro {
+  average_pct: number | null
+  level: string | null
+  count: number
+}
+
 export interface GradebookStudent {
   student: { public_id: string; first_name: string; last_name: string; email: string }
   grades: Record<string, GradebookGrade | null>
+  logros: Record<string, GradebookLogro>
+  definitiva: number | null
+  definitiva_level: string | null
   average: number | null
   completed: number
   total: number
@@ -350,6 +360,7 @@ export interface AssignmentRead {
   description: string | null
   due_date: string | null
   max_score: number
+  logro: string | null
   is_published: boolean
   created_at: string
   updated_at: string

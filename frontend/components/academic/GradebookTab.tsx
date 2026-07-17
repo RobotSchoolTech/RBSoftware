@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  LOGROS,
+  LOGRO_LABELS,
+  NIVEL_CLASSES,
+  nivelLabel,
+  type Logro,
+  type NivelLogro,
+} from '@/lib/logros'
 import * as academicService from '@/services/academic'
 import type { Gradebook } from '@/lib/types'
 
@@ -15,19 +23,23 @@ interface Props {
 function exportToCSV(gradebook: Gradebook) {
   const headers = [
     'Estudiante',
-    ...gradebook.assignments.map((a) => a.title),
-    'Promedio',
+    'Email',
+    ...LOGROS.map((lg) => LOGRO_LABELS[lg]),
+    'Definitiva (%)',
+    'Nivel general',
   ]
   const rows = gradebook.students.map((s) => [
     `${s.student.first_name} ${s.student.last_name}`,
-    ...gradebook.assignments.map((a) => {
-      const g = s.grades[a.public_id]
-      return g?.score ?? '-'
-    }),
-    s.average ?? '-',
+    s.student.email,
+    ...LOGROS.map((lg) => nivelLabel(s.logros[lg]?.level)),
+    s.definitiva ?? '-',
+    nivelLabel(s.definitiva_level),
   ])
-  const csv = [headers, ...rows].map((r) => r.join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
+  const csv = [headers, ...rows]
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  // BOM UTF-8 para que Excel abra los acentos (Diseñar, etc.) correctamente.
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -44,16 +56,31 @@ function scoreColor(score: number | null | undefined, max: number) {
     : 'text-red-700 dark:text-red-400'
 }
 
-function avgColor(avg: number | null) {
-  if (avg == null) return 'text-muted-foreground'
-  return avg >= 60
-    ? 'text-green-700 dark:text-green-400 font-semibold'
-    : 'text-red-700 dark:text-red-400 font-semibold'
-}
-
 function round(n: number, d: number) {
   const f = 10 ** d
   return Math.round(n * f) / f
+}
+
+/** Badge de nivel cualitativo con su porcentaje. */
+function LevelBadge({
+  pct,
+  level,
+}: {
+  pct: number | null
+  level: string | null
+}) {
+  if (pct == null || !level) return <span className="text-muted-foreground">—</span>
+  const cls = NIVEL_CLASSES[level as NivelLogro] ?? ''
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
+      >
+        {nivelLabel(level)}
+      </span>
+      <span className="text-[11px] text-muted-foreground">{pct}%</span>
+    </div>
+  )
 }
 
 export function GradebookTab({ courseId }: Props) {
@@ -92,17 +119,25 @@ export function GradebookTab({ courseId }: Props) {
 
   const { assignments, students } = gradebook
 
-  const classAverages = assignments.map((a) => {
-    const scores = students
-      .map((s) => s.grades[a.public_id]?.score)
-      .filter((s): s is number => s != null)
-    return scores.length ? round(scores.reduce((acc, s) => acc + s, 0) / scores.length, 1) : null
-  })
-
-  const globalAvg = (() => {
-    const avgs = students.map((s) => s.average).filter((a): a is number => a != null)
-    return avgs.length ? round(avgs.reduce((acc, a) => acc + a, 0) / avgs.length, 1) : null
+  // Promedio de clase por logro (media de los promedios de los estudiantes con datos).
+  const classLogro = (lg: Logro): number | null => {
+    const vals = students
+      .map((s) => s.logros[lg]?.average_pct)
+      .filter((v): v is number => v != null)
+    return vals.length ? round(vals.reduce((a, v) => a + v, 0) / vals.length, 1) : null
+  }
+  const classDefinitiva = (() => {
+    const vals = students.map((s) => s.definitiva).filter((v): v is number => v != null)
+    return vals.length ? round(vals.reduce((a, v) => a + v, 0) / vals.length, 1) : null
   })()
+
+  const qualitative = (pct: number | null): string | null => {
+    if (pct == null) return null
+    if (pct >= 90) return 'excelente'
+    if (pct >= 75) return 'bueno'
+    if (pct >= 60) return 'regular'
+    return 'insuficiente'
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -132,15 +167,33 @@ export function GradebookTab({ courseId }: Props) {
                       {a.title.length > 15 ? a.title.slice(0, 15) + '…' : a.title}
                     </div>
                     <div className="text-xs text-muted-foreground font-normal">/{a.max_score}</div>
+                    <div className="text-[11px] font-normal text-primary">
+                      {a.logro
+                        ? LOGRO_LABELS[a.logro as Logro] ?? a.logro
+                        : <span className="text-muted-foreground">Sin logro</span>}
+                    </div>
                   </th>
                 ))}
-                <th className="px-3 py-2 text-center font-medium min-w-[90px]">Promedio</th>
+                {LOGROS.map((lg) => (
+                  <th
+                    key={lg}
+                    className="px-3 py-2 text-center font-semibold min-w-[100px] border-l bg-muted/20"
+                  >
+                    {LOGRO_LABELS[lg]}
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-center font-semibold min-w-[100px] border-l bg-muted/40">
+                  Definitiva
+                </th>
               </tr>
             </thead>
             <tbody>
               {students.length === 0 ? (
                 <tr>
-                  <td colSpan={assignments.length + 2} className="py-8 text-center text-muted-foreground">
+                  <td
+                    colSpan={assignments.length + LOGROS.length + 2}
+                    className="py-8 text-center text-muted-foreground"
+                  >
                     No hay estudiantes matriculados
                   </td>
                 </tr>
@@ -174,23 +227,44 @@ export function GradebookTab({ courseId }: Props) {
                           </td>
                         )
                       })}
-                      <td className={`px-3 py-2 text-center ${avgColor(s.average)}`}>
-                        {s.average != null ? s.average : '—'}
+                      {LOGROS.map((lg) => {
+                        const l = s.logros[lg]
+                        return (
+                          <td key={lg} className="px-3 py-2 text-center border-l bg-muted/10">
+                            <LevelBadge pct={l?.average_pct ?? null} level={l?.level ?? null} />
+                          </td>
+                        )
+                      })}
+                      <td className="px-3 py-2 text-center border-l bg-muted/20">
+                        <LevelBadge pct={s.definitiva} level={s.definitiva_level} />
                       </td>
                     </tr>
                   ))}
                   <tr className="border-t-2 bg-muted/20 font-medium">
                     <td className="sticky left-0 z-10 bg-muted/20 px-4 py-2">Promedio clase</td>
-                    {classAverages.map((avg, i) => (
-                      <td
-                        key={assignments[i].public_id}
-                        className={`px-3 py-2 text-center ${avgColor(avg)}`}
-                      >
-                        {avg != null ? avg : '—'}
-                      </td>
-                    ))}
-                    <td className={`px-3 py-2 text-center ${avgColor(globalAvg)}`}>
-                      {globalAvg != null ? globalAvg : '—'}
+                    {assignments.map((a) => {
+                      const scores = students
+                        .map((s) => s.grades[a.public_id]?.score)
+                        .filter((v): v is number => v != null)
+                      const avg = scores.length
+                        ? round(scores.reduce((acc, v) => acc + v, 0) / scores.length, 1)
+                        : null
+                      return (
+                        <td key={a.public_id} className="px-3 py-2 text-center text-muted-foreground">
+                          {avg != null ? avg : '—'}
+                        </td>
+                      )
+                    })}
+                    {LOGROS.map((lg) => {
+                      const pct = classLogro(lg)
+                      return (
+                        <td key={lg} className="px-3 py-2 text-center border-l">
+                          <LevelBadge pct={pct} level={qualitative(pct)} />
+                        </td>
+                      )
+                    })}
+                    <td className="px-3 py-2 text-center border-l">
+                      <LevelBadge pct={classDefinitiva} level={qualitative(classDefinitiva)} />
                     </td>
                   </tr>
                 </>

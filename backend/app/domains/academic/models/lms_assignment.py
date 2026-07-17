@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.types import Uuid
 from sqlmodel import Field, SQLModel
+
+# Los tres logros/ejes de robótica bajo los que se agrupa cada actividad.
+# Claves ASCII para el ENUM de MySQL; las etiquetas visibles ("Diseñar", …)
+# viven en el frontend.
+LOGRO_VALUES = ("disenar", "programar", "robotizar")
 
 
 class LmsAssignment(SQLModel, table=True):
@@ -25,6 +30,10 @@ class LmsAssignment(SQLModel, table=True):
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
     max_score: int = Field(default=100, nullable=False)
+    logro: str | None = Field(
+        default=None,
+        sa_column=Column(Enum(*LOGRO_VALUES, name="logro"), nullable=True),
+    )
     is_published: bool = Field(default=False, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

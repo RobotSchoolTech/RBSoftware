@@ -520,6 +520,121 @@ class AcademicService:
         self._assert_admin_or_director(session, course.grade_id, user_id)
         return CourseRepository(session).update(course, data)
 
+    def get_course_deletion_impact(
+        self,
+        session: Session,
+        course_id: int,
+        requesting_user_id: int,
+    ) -> dict:
+        """Qué se destruiría al borrar el curso. Alimenta la confirmación de la UI.
+
+        Borrar `lms_courses` arrastra en cascada (verificado contra las FKs de
+        prod): lms_course_students · lms_units → lms_assignments → (
+        lms_submissions + rubrics) · lms_units → lms_materials → pdf_annotations.
+        """
+        course = CourseRepository(session).get_by_id(course_id)
+        if course is None:
+            raise LookupError("Course not found")
+
+        self._assert_admin_or_director(session, course.grade_id, requesting_user_id)
+
+        units = session.exec(
+            select(LmsUnit).where(LmsUnit.course_id == course.id)
+        ).all()
+        unit_ids = [u.id for u in units]
+
+        # Todas las filas, no solo las activas: la cascada se lleva también las
+        # matrículas dadas de baja (is_active=false), que son el histórico.
+        students = len(
+            session.exec(
+                select(LmsCourseStudent).where(
+                    LmsCourseStudent.course_id == course.id
+                )
+            ).all()
+        )
+        assignments = 0
+        materials = 0
+        submissions = 0
+        if unit_ids:
+            assignment_rows = session.exec(
+                select(LmsAssignment).where(LmsAssignment.unit_id.in_(unit_ids))
+            ).all()
+            assignments = len(assignment_rows)
+            materials = len(
+                session.exec(
+                    select(LmsMaterial).where(LmsMaterial.unit_id.in_(unit_ids))
+                ).all()
+            )
+            if assignment_rows:
+                submissions = len(
+                    session.exec(
+                        select(LmsSubmission).where(
+                            LmsSubmission.assignment_id.in_(
+                                [a.id for a in assignment_rows]
+                            )
+                        )
+                    ).all()
+                )
+
+        return {
+            "students": students,
+            "units": len(units),
+            "assignments": assignments,
+            "materials": materials,
+            "submissions": submissions,
+            # El trabajo entregado por estudiantes no se puede reconstruir → si
+            # existe, el borrado se bloquea (ver delete_course).
+            "can_delete": submissions == 0,
+        }
+
+    def delete_course(
+        self,
+        session: Session,
+        course_id: int,
+        requesting_user_id: int,
+    ) -> None:
+        course = CourseRepository(session).get_by_id(course_id)
+        if course is None:
+            raise LookupError("Course not found")
+
+        self._assert_admin_or_director(session, course.grade_id, requesting_user_id)
+
+        impact = self.get_course_deletion_impact(session, course.id, requesting_user_id)
+        # Guarda anti-cascada: matrículas y unidades se pueden rehacer; las
+        # ENTREGAS de los estudiantes no. Si hay aunque sea una, no se borra.
+        if impact["submissions"]:
+            raise ValueError(
+                f"No se puede eliminar un curso con entregas de estudiantes "
+                f"({impact['submissions']}). El trabajo entregado no se puede "
+                f"recuperar. Desactiva el curso en vez de eliminarlo."
+            )
+
+        # Capturar ANTES de borrar: tras el delete el objeto queda expirado y el
+        # log se escribe después, para no dejar rastro de un borrado que falló.
+        payload = {
+            "name": course.name,
+            "grade_id": course.grade_id,
+            "school_id": course.school_id,
+            "teacher_id": course.teacher_id,
+            # Qué se llevó la cascada, para poder reconstruir el contexto.
+            "cascaded": {
+                k: impact[k]
+                for k in ("students", "units", "assignments", "materials")
+            },
+        }
+        course_id_val = course.id
+
+        CourseRepository(session).delete(course)
+
+        _audit.log(
+            session,
+            user_id=requesting_user_id,
+            action="academic.course.deleted",
+            resource_type="lms_course",
+            resource_id=str(course_id_val),
+            payload=payload,
+        )
+
     def get_assignable_teachers_for_course(
         self,
         session: Session,
@@ -789,6 +904,41 @@ class AcademicService:
             file_name=repo_file.file_name,
         )
 
+    def get_material_deletion_impact(
+        self,
+        session: Session,
+        material_id: int,
+        requesting_user_id: int,
+    ) -> dict:
+        """Qué se pierde al borrar el material. Alimenta la confirmación de la UI.
+
+        `pdf_annotations.material_id` es CASCADE en la BD (el modelo no lo
+        declara, pero el DDL de prod sí), así que las anotaciones se van con el
+        material. No bloquean el borrado: son notas personales de estudio, no
+        trabajo calificado — a diferencia de las entregas de una tarea.
+        """
+        material = MaterialRepository(session).get_by_id(material_id)
+        if material is None:
+            raise LookupError("Material not found")
+        unit = UnitRepository(session).get_by_id(material.unit_id)
+        course = CourseRepository(session).get_by_id(unit.course_id)
+        self._assert_admin_or_teacher(session, course, requesting_user_id)
+
+        annotations = len(
+            session.exec(
+                select(PdfAnnotation).where(PdfAnnotation.material_id == material.id)
+            ).all()
+        )
+        return {
+            "title": material.title,
+            "annotations": annotations,
+            # El archivo del repositorio es compartido: se conserva.
+            "deletes_file": bool(
+                material.file_key and material.file_key.startswith("academic/")
+            ),
+            "can_delete": True,
+        }
+
     def delete_material(
         self,
         session: Session,
@@ -803,6 +953,10 @@ class AcademicService:
         course = CourseRepository(session).get_by_id(unit.course_id)
         self._assert_admin_or_teacher(session, course, requesting_user_id)
 
+        impact = self.get_material_deletion_impact(
+            session, material.id, requesting_user_id
+        )
+
         # Solo borrar el objeto en MinIO si es propio de academic. Los materiales
         # tomados del repositorio reutilizan el file_key del repositorio
         # (prefijo "repository/"): borrarlo dejaría rota la fuente y cualquier
@@ -810,7 +964,111 @@ class AcademicService:
         if material.file_key and material.file_key.startswith("academic/"):
             storage_service.delete_file(material.file_key)
 
+        # Capturar antes del delete: después el objeto queda expirado.
+        payload = {
+            "title": material.title,
+            "unit_id": material.unit_id,
+            "course_id": course.id,
+            "file_key": material.file_key,
+            "cascaded": {"annotations": impact["annotations"]},
+        }
+        material_id_val = material.id
+
         repo.delete(material)
+
+        _audit.log(
+            session,
+            user_id=requesting_user_id,
+            action="academic.material.deleted",
+            resource_type="lms_material",
+            resource_id=str(material_id_val),
+            payload=payload,
+        )
+
+    def get_assignment_deletion_impact(
+        self,
+        session: Session,
+        assignment_id: int,
+        requesting_user_id: int,
+    ) -> dict:
+        """Qué se destruiría al borrar la tarea. Alimenta la confirmación de la UI.
+
+        Verificado contra las FKs de prod: borrar `lms_assignments` arrastra
+        lms_submissions y rubrics → rubric_criteria → rubric_levels.
+        """
+        assignment = AssignmentRepository(session).get_by_id(assignment_id)
+        if assignment is None:
+            raise LookupError("Assignment not found")
+        unit = UnitRepository(session).get_by_id(assignment.unit_id)
+        course = CourseRepository(session).get_by_id(unit.course_id)
+        self._assert_admin_or_teacher(session, course, requesting_user_id)
+
+        submission_rows = session.exec(
+            select(LmsSubmission).where(LmsSubmission.assignment_id == assignment.id)
+        ).all()
+        graded = len(
+            [s for s in submission_rows if s.status == SubmissionStatus.GRADED]
+        )
+        rubrics = len(
+            session.exec(
+                select(Rubric).where(Rubric.lms_assignment_id == assignment.id)
+            ).all()
+        )
+
+        return {
+            "title": assignment.title,
+            "submissions": len(submission_rows),
+            "graded_submissions": graded,
+            "rubrics": rubrics,
+            # Misma regla que delete_course: el trabajo entregado por un
+            # estudiante no se puede reconstruir, así que lo protege.
+            "can_delete": len(submission_rows) == 0,
+        }
+
+    def delete_assignment(
+        self,
+        session: Session,
+        assignment_id: int,
+        requesting_user_id: int,
+    ) -> None:
+        repo = AssignmentRepository(session)
+        assignment = repo.get_by_id(assignment_id)
+        if assignment is None:
+            raise LookupError("Assignment not found")
+        unit = UnitRepository(session).get_by_id(assignment.unit_id)
+        course = CourseRepository(session).get_by_id(unit.course_id)
+        self._assert_admin_or_teacher(session, course, requesting_user_id)
+
+        impact = self.get_assignment_deletion_impact(
+            session, assignment.id, requesting_user_id
+        )
+        # Guarda anti-cascada, igual que en delete_course: la rúbrica se puede
+        # rehacer; las ENTREGAS de los estudiantes no.
+        if impact["submissions"]:
+            raise ValueError(
+                f"No se puede eliminar una tarea con entregas de estudiantes "
+                f"({impact['submissions']}). El trabajo entregado no se puede "
+                f"recuperar. Despublica la tarea en vez de eliminarla."
+            )
+
+        payload = {
+            "title": assignment.title,
+            "unit_id": assignment.unit_id,
+            "course_id": course.id,
+            "cascaded": {"rubrics": impact["rubrics"]},
+        }
+        assignment_id_val = assignment.id
+
+        repo.delete(assignment)
+
+        _audit.log(
+            session,
+            user_id=requesting_user_id,
+            action="academic.assignment.deleted",
+            resource_type="lms_assignment",
+            resource_id=str(assignment_id_val),
+            payload=payload,
+        )
 
     def publish_material(
         self,
@@ -1098,6 +1356,26 @@ class AcademicService:
 
     # ── Gradebook ──────────────────────────────────────────────────────────
 
+    # Los tres logros y el orden en que se muestran en la planilla / CSV.
+    LOGROS = ("disenar", "programar", "robotizar")
+
+    @staticmethod
+    def _qualitative_level(pct: float | None) -> str | None:
+        """Traduce un porcentaje (0–100) a la escala cualitativa del equipo.
+
+        Cortes acordados: Excelente ≥90 · Bueno 75–89 · Regular 60–74 ·
+        Insuficiente <60.
+        """
+        if pct is None:
+            return None
+        if pct >= 90:
+            return "excelente"
+        if pct >= 75:
+            return "bueno"
+        if pct >= 60:
+            return "regular"
+        return "insuficiente"
+
     def get_gradebook(
         self,
         session: Session,
@@ -1117,6 +1395,9 @@ class AcademicService:
         for student in students:
             grades = {}
             scores: list[int] = []
+            # Porcentajes (score/max_score) acumulados por logro, para promediar
+            # cada logro sobre una base normalizada (tolera tareas 0–5 y 0–100).
+            logro_pcts: dict[str, list[float]] = {lg: [] for lg in self.LOGROS}
             for assignment in assignments:
                 sub = SubmissionRepository(session).get_by_student_and_assignment(
                     student.id, assignment.id
@@ -1129,8 +1410,33 @@ class AcademicService:
                     }
                     if sub.score is not None:
                         scores.append(sub.score)
+                        if assignment.logro in logro_pcts and assignment.max_score:
+                            logro_pcts[assignment.logro].append(
+                                sub.score / assignment.max_score * 100
+                            )
                 else:
                     grades[str(assignment.public_id)] = None
+
+            # Promedio y nivel de cada logro; None si aún no tiene notas.
+            logros_result: dict[str, dict] = {}
+            logro_averages: list[float] = []
+            for lg in self.LOGROS:
+                pcts = logro_pcts[lg]
+                avg_pct = round(sum(pcts) / len(pcts), 1) if pcts else None
+                if avg_pct is not None:
+                    logro_averages.append(avg_pct)
+                logros_result[lg] = {
+                    "average_pct": avg_pct,
+                    "level": self._qualitative_level(avg_pct),
+                    "count": len(pcts),
+                }
+
+            # Definitiva = promedio simple de los logros que ya tienen datos.
+            definitiva = (
+                round(sum(logro_averages) / len(logro_averages), 1)
+                if logro_averages
+                else None
+            )
 
             average = round(sum(scores) / len(scores), 1) if scores else None
             result_students.append({
@@ -1141,6 +1447,9 @@ class AcademicService:
                     "email": student.email,
                 },
                 "grades": grades,
+                "logros": logros_result,
+                "definitiva": definitiva,
+                "definitiva_level": self._qualitative_level(definitiva),
                 "average": average,
                 "completed": len(scores),
                 "total": len(assignments),
@@ -1153,6 +1462,7 @@ class AcademicService:
                     "public_id": str(a.public_id),
                     "title": a.title,
                     "max_score": a.max_score,
+                    "logro": a.logro,
                     "due_date": str(a.due_date) if a.due_date else None,
                 }
                 for a in assignments

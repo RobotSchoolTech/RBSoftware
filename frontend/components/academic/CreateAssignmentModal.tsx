@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { LOGROS, LOGRO_LABELS } from '@/lib/logros'
 import * as academicService from '@/services/academic'
 
 interface Props {
@@ -17,6 +18,7 @@ export function CreateAssignmentModal({ unitId, onClose, onCreated }: Props) {
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [maxScore, setMaxScore] = useState('100')
+  const [logro, setLogro] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,6 +32,7 @@ export function CreateAssignmentModal({ unitId, onClose, onCreated }: Props) {
         description: description.trim() || null,
         due_date: dueDate || null,
         max_score: parseInt(maxScore) || 100,
+        logro: logro || null,
       })
       onCreated()
     } catch (err: any) {
@@ -85,6 +88,25 @@ export function CreateAssignmentModal({ unitId, onClose, onCreated }: Props) {
                 onChange={(e) => setMaxScore(e.target.value)}
               />
             </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Logro</label>
+            <select
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={logro}
+              onChange={(e) => setLogro(e.target.value)}
+            >
+              <option value="">Sin logro</option>
+              {LOGROS.map((lg) => (
+                <option key={lg} value={lg}>
+                  {LOGRO_LABELS[lg]}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Define bajo qué logro (Diseñar, Programar o Robotizar) cuenta esta
+              tarea en la planilla.
+            </p>
           </div>
           {error && (
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">

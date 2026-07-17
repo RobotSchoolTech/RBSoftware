@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LOGROS, LOGRO_LABELS } from '@/lib/logros'
 import * as academicService from '@/services/academic'
 import type { AssignmentRead } from '@/lib/types'
 import { CreateAssignmentModal } from './CreateAssignmentModal'
@@ -20,6 +21,7 @@ export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent 
   const [showCreate, setShowCreate] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [savingLogro, setSavingLogro] = useState<string | null>(null)
 
   async function handleTogglePublish(id: string, isPublished: boolean) {
     setToggling(id)
@@ -32,6 +34,16 @@ export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent 
       onChanged()
     } finally {
       setToggling(null)
+    }
+  }
+
+  async function handleLogroChange(id: string, value: string) {
+    setSavingLogro(id)
+    try {
+      await academicService.updateAssignment(id, { logro: value || null })
+      onChanged()
+    } finally {
+      setSavingLogro(null)
     }
   }
 
@@ -77,6 +89,28 @@ export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent 
               )}
             </div>
             <div className="flex items-center gap-2">
+              {canEditContent ? (
+                <select
+                  className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                  value={a.logro ?? ''}
+                  disabled={savingLogro === a.public_id}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleLogroChange(a.public_id, e.target.value)}
+                >
+                  <option value="">Sin logro</option>
+                  {LOGROS.map((lg) => (
+                    <option key={lg} value={lg}>
+                      {LOGRO_LABELS[lg]}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                a.logro && (
+                  <Badge variant="secondary">
+                    {LOGRO_LABELS[a.logro as keyof typeof LOGRO_LABELS] ?? a.logro}
+                  </Badge>
+                )
+              )}
               <Badge variant={a.is_published ? 'success' : 'secondary'}>
                 {a.is_published ? 'Publicada' : 'Borrador'}
               </Badge>
