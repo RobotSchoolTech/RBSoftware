@@ -47,6 +47,30 @@ from app.domains.repository.services.visibility import can_see_file, get_user_sc
 
 _audit = AuditService()
 
+# Extensiones permitidas al subir un material del docente. Antes solo se aceptaba
+# PDF (con la extensión forzada); ahora se admiten archivos de programación,
+# código, imágenes y ofimática. Whitelist server-side: hasta ahora la única
+# restricción de tipo vivía en el `accept` del navegador → se saltaba llamando la
+# API directo. Extensiones sin punto, en minúscula.
+ALLOWED_MATERIAL_EXTENSIONS = frozenset(
+    {
+        "pdf", "html", "ino", "mblock", "sb3", "py", "txt", "json", "zip",
+        "png", "jpg", "jpeg", "docx", "pptx", "xlsx",
+    }
+)
+
+# Tipos que el navegador ejecutaría si se sirvieran inline (riesgo de XSS
+# almacenado). Estos siempre se sirven como descarga (Content-Disposition:
+# attachment), nunca inline, aunque estén en la whitelist.
+INLINE_UNSAFE_EXTENSIONS = frozenset({"html", "htm", "svg", "xml", "xhtml"})
+
+
+def _extension_of(name: str | None) -> str:
+    """Extensión en minúscula sin punto, o '' si no tiene."""
+    if not name or "." not in name:
+        return ""
+    return name.rsplit(".", 1)[-1].lower()
+
 
 class AcademicService:
 
@@ -835,6 +859,7 @@ class AcademicService:
         file_bytes: bytes | None,
         content_type: str | None,
         requesting_user_id: int,
+        file_name: str | None = None,
     ) -> LmsMaterial:
         unit = UnitRepository(session).get_by_id(unit_id)
         if unit is None:
@@ -843,13 +868,25 @@ class AcademicService:
         self._assert_admin_or_teacher(session, course, requesting_user_id)
 
         file_key = None
-        if data.type == "PDF" and file_bytes is not None:
-            file_key = f"academic/{course.id}/materials/{uuid4()}.pdf"
+        stored_file_name = None
+        if file_bytes is not None:
+            # Se preserva la extensión y el content-type reales (ya no se fuerza
+            # .pdf). La whitelist server-side cierra el hueco de subir cualquier
+            # cosa por API — no confiar solo en el `accept` del navegador.
+            ext = _extension_of(file_name)
+            if ext not in ALLOWED_MATERIAL_EXTENSIONS:
+                raise ValueError(
+                    f"Tipo de archivo no permitido: .{ext or '(sin extensión)'}"
+                )
+            file_key = f"academic/{course.id}/materials/{uuid4()}.{ext}"
             storage_service.upload_file(
-                file_bytes, file_key, content_type or "application/pdf"
+                file_bytes, file_key, content_type or "application/octet-stream"
             )
+            stored_file_name = file_name
 
-        return MaterialRepository(session).create(unit_id, data, file_key=file_key)
+        return MaterialRepository(session).create(
+            unit_id, data, file_key=file_key, file_name=stored_file_name
+        )
 
     def add_material_from_repository(
         self,
@@ -1112,7 +1149,11 @@ class AcademicService:
             if not material.is_published:
                 raise PermissionError("Material no disponible")
 
-        url = storage_service.generate_presigned_url(material.file_key, inline=True)
+        # Los tipos que el navegador ejecutaría (HTML, SVG…) se sirven SIEMPRE
+        # como descarga, nunca inline, para evitar XSS almacenado al abrirlos.
+        ext = _extension_of(material.file_name) or _extension_of(material.file_key)
+        inline = ext not in INLINE_UNSAFE_EXTENSIONS
+        url = storage_service.generate_presigned_url(material.file_key, inline=inline)
         return {"url": url, "file_name": material.file_name}
 
     def get_material_download_url(
