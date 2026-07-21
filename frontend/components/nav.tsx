@@ -130,15 +130,23 @@ export function Nav() {
         collapsed ? 'w-56 md:w-16' : 'w-56',
       )}
     >
-      {/* Logo */}
+      {/* Logo → portal SSO unificado (misma pestaña) */}
       <div className="flex h-16 items-center border-b border-border px-4">
-        <div className={cn('flex items-center gap-3', collapsed && 'md:justify-center md:w-full')}>
+        <a
+          href="https://app.miel-robotschool.com"
+          title="Volver al portal ROBOTSchool"
+          aria-label="Volver al portal ROBOTSchool"
+          className={cn(
+            'flex items-center gap-3 transition-opacity hover:opacity-85',
+            collapsed && 'md:justify-center md:w-full',
+          )}
+        >
           <OwlLogo className="h-8 w-auto shrink-0" />
           <div className={cn('flex flex-col', collapsed && 'md:hidden')}>
             <span className="text-sm font-bold leading-tight text-foreground">RBSoftware</span>
             <span className="text-xs font-medium leading-tight text-primary">by ROBOTSchool</span>
           </div>
-        </div>
+        </a>
       </div>
 
       {/* Navigation */}
