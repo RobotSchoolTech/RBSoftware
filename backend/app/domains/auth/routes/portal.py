@@ -109,6 +109,34 @@ def list_courses_for_portal(
     }
 
 
+class StudentCoursesRequest(BaseModel):
+    emails: list[str]
+
+
+@router.post("/students/courses")
+def courses_for_students(
+    payload: StudentCoursesRequest,
+    session: Session = Depends(get_session),
+    _: None = Depends(_verify_service_token),
+) -> dict:
+    """Mapa email → curso(s) del LMS de una lista de estudiantes.
+
+    El portal lo usa al generar contraseñas para mostrar a qué curso pertenece
+    cada estudiante (columna en el CSV) y así no revolver la entrega. El vínculo
+    es por email; solo matrículas activas. Los emails sin matrícula no aparecen.
+    """
+    rows = CourseStudentRepository(session).courses_by_emails(payload.emails)
+    by_email: dict[str, list[str]] = {}
+    for email, course_name in rows:
+        by_email.setdefault(email.lower(), []).append(course_name)
+    return {
+        "students": [
+            {"email": email, "courses": courses}
+            for email, courses in by_email.items()
+        ]
+    }
+
+
 @router.get("/schools/{school_public_id}/teachers")
 def list_teachers_for_portal(
     school_public_id: UUID,
