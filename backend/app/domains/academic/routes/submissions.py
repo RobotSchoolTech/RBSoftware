@@ -11,6 +11,7 @@ from app.core.storage import storage_service
 from app.domains.academic.repositories import AssignmentRepository, SubmissionRepository
 from app.domains.academic.schemas import SubmissionRead
 from app.domains.academic.services import AcademicService
+from app.domains.academic.services.academic_service import is_submission_late
 from app.core.permissions import require_roles
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
@@ -63,7 +64,9 @@ async def submit_assignment(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
-    return SubmissionRead.model_validate(submission)
+    result = SubmissionRead.model_validate(submission)
+    result.is_late = is_submission_late(submission.submitted_at, assignment.due_date)
+    return result
 
 
 @router.get(
@@ -83,7 +86,9 @@ def get_my_submission(
     )
     if submission is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No submission found")
-    return SubmissionRead.model_validate(submission)
+    result = SubmissionRead.model_validate(submission)
+    result.is_late = is_submission_late(submission.submitted_at, assignment.due_date)
+    return result
 
 
 @router.get("/submissions/{submission_id}/view")

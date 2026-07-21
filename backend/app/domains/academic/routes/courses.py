@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlmodel import Session
 
 from app.core.database import get_session
+from app.domains.academic.models.lms_submission import LmsSubmission
 from app.domains.academic.repositories import (
     AssignmentRepository,
     CourseRepository,
@@ -18,6 +19,7 @@ from app.domains.academic.schemas import (
     MaterialRead, MyCourseRead, SubmissionRead, UnitRead,
 )
 from app.domains.academic.services import AcademicService
+from app.domains.academic.services.academic_service import is_submission_late
 from app.core.permissions import require_roles
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
@@ -58,6 +60,21 @@ class _UnitStudentView(BaseModel):
     is_published: bool
     materials: list[MaterialRead] = []
     assignments: list[_AssignmentStudentView] = []
+
+
+def _student_submission_read(
+    sub: LmsSubmission | None, due_date: datetime | None
+) -> SubmissionRead | None:
+    """Serializa la entrega del estudiante marcando si fue tardía.
+
+    ``is_late`` no vive en el ORM: se calcula aquí contra el ``due_date`` de la
+    actividad, que sí está en scope al recorrer el contenido del curso.
+    """
+    if sub is None:
+        return None
+    read = SubmissionRead.model_validate(sub)
+    read.is_late = is_submission_late(sub.submitted_at, due_date)
+    return read
 
 
 @router.get("/my-courses", response_model=list[MyCourseRead])
@@ -239,9 +256,7 @@ def get_course_content(
                         due_date=a.due_date,
                         max_score=a.max_score,
                         is_published=a.is_published,
-                        my_submission=(
-                            SubmissionRead.model_validate(sub) if sub else None
-                        ),
+                        my_submission=_student_submission_read(sub, a.due_date),
                     )
                     for a, sub in assignment_pairs
                 ],

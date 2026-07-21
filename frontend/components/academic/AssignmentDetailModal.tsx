@@ -117,6 +117,9 @@ export function AssignmentDetailModal({ assignmentId, onClose }: Props) {
                             Solo texto
                           </Badge>
                         )}
+                        {s.is_late && (
+                          <Badge variant="destructive">Entregada tarde</Badge>
+                        )}
                         <Badge
                           variant={
                             s.status === 'GRADED' ? 'success' : 'warning'

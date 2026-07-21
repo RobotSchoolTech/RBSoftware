@@ -377,6 +377,7 @@ export interface SubmissionWithStudent {
   graded_at: string | null
   created_at: string
   updated_at: string
+  is_late: boolean
   student: User
 }
 
@@ -392,6 +393,7 @@ export interface MySubmission {
   graded_at: string | null
   created_at: string
   updated_at: string
+  is_late: boolean
 }
 
 export interface StudentAssignment {

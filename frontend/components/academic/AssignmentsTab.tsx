@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { CalendarClock, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LOGROS, LOGRO_LABELS } from '@/lib/logros'
@@ -9,6 +9,7 @@ import * as academicService from '@/services/academic'
 import type { AssignmentRead } from '@/lib/types'
 import { CreateAssignmentModal } from './CreateAssignmentModal'
 import { AssignmentDetailModal } from './AssignmentDetailModal'
+import { EditDueDateModal } from './EditDueDateModal'
 
 interface Props {
   unitId: string
@@ -20,6 +21,7 @@ interface Props {
 export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent = true }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [editingDue, setEditingDue] = useState<AssignmentRead | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [savingLogro, setSavingLogro] = useState<string | null>(null)
 
@@ -63,6 +65,16 @@ export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent 
         <AssignmentDetailModal
           assignmentId={selectedId}
           onClose={() => setSelectedId(null)}
+        />
+      )}
+      {editingDue && (
+        <EditDueDateModal
+          assignment={editingDue}
+          onClose={() => setEditingDue(null)}
+          onSaved={() => {
+            setEditingDue(null)
+            onChanged()
+          }}
         />
       )}
 
@@ -117,6 +129,19 @@ export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent 
               <span className="text-xs text-muted-foreground">
                 Máx: {a.max_score}
               </span>
+              {canEditContent && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Editar fecha límite"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEditingDue(a)
+                  }}
+                >
+                  <CalendarClock size={14} />
+                </Button>
+              )}
               {canEditContent && (
                 <Button
                   size="sm"

@@ -12,6 +12,7 @@ from app.domains.academic.schemas import (
     SubmissionWithStudent,
 )
 from app.domains.academic.services import AcademicService
+from app.domains.academic.services.academic_service import is_submission_late
 from app.core.permissions import require_roles
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
@@ -144,6 +145,7 @@ def get_submissions(
             graded_at=sub.graded_at,
             created_at=sub.created_at,
             updated_at=sub.updated_at,
+            is_late=is_submission_late(sub.submitted_at, assignment.due_date),
             student=UserRead.model_validate(user),
         )
         for sub, user in rows

@@ -48,6 +48,24 @@ from app.domains.repository.services.visibility import can_see_file, get_user_sc
 _audit = AuditService()
 
 
+def is_submission_late(
+    submitted_at: datetime | None, due_date: datetime | None
+) -> bool:
+    """¿La entrega fue posterior al límite?
+
+    Marcador suave (no bloquea la entrega). Solo aplica si la actividad tiene
+    fecha límite y la entrega ya ocurrió. Ambos timestamps se guardan en UTC
+    (``submitted_at`` server-side; ``due_date`` lo manda el calendario en UTC),
+    así que se comparan sin tzinfo para evitar el TypeError aware-vs-naive que
+    devuelve MySQL al leer columnas ``DateTime(timezone=True)``.
+    """
+    if submitted_at is None or due_date is None:
+        return False
+    submitted = submitted_at.replace(tzinfo=None)
+    due = due_date.replace(tzinfo=None)
+    return submitted > due
+
+
 class AcademicService:
 
     # ── Helpers ──────────────────────────────────────────────────────────────
