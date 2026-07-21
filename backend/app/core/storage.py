@@ -38,17 +38,24 @@ class StorageService:
         key: str,
         expires_seconds: int = 3600,
         inline: bool = True,
+        content_type: str | None = None,
     ) -> str:
         disposition = (
             "inline" if inline
             else f'attachment; filename="{key.split("/")[-1]}"'
         )
+        response_headers = {
+            "response-content-disposition": disposition,
+        }
+        # Fuerza el content-type servido (firmado en la URL) en vez de confiar en
+        # el que quedó guardado en el objeto. Cierra el vector de servir un
+        # archivo con un content-type manipulado (p. ej. text/html) inline.
+        if content_type is not None:
+            response_headers["response-content-type"] = content_type
         url = self.client.presigned_get_object(
             self.bucket, key,
             expires=timedelta(seconds=expires_seconds),
-            response_headers={
-                "response-content-disposition": disposition,
-            },
+            response_headers=response_headers,
         )
         url = url.replace(
             f"http://{settings.minio_endpoint}",

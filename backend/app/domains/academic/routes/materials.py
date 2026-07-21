@@ -54,18 +54,18 @@ async def add_material(
     if unit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unit not found")
     file_bytes = None
-    content_type = None
     file_name = None
     if file is not None:
         file_bytes = await file.read()
         if len(file_bytes) > 100 * 1024 * 1024:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "File size exceeds 100 MB limit")
-        content_type = file.content_type
+        # El content-type del cliente no se usa: se ancla server-side desde la
+        # extensión (ver AcademicService.add_material) para evitar XSS.
         file_name = file.filename
     data = MaterialCreate(title=title, type=type, content=content)
     try:
         material = _svc.add_material(
-            session, unit.id, data, file_bytes, content_type, current_user.id,
+            session, unit.id, data, file_bytes, current_user.id,
             file_name=file_name,
         )
     except PermissionError as exc:

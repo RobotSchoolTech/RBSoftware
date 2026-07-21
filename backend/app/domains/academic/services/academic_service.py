@@ -59,10 +59,12 @@ ALLOWED_MATERIAL_EXTENSIONS = frozenset(
     }
 )
 
-# Tipos que el navegador ejecutaría si se sirvieran inline (riesgo de XSS
-# almacenado). Estos siempre se sirven como descarga (Content-Disposition:
-# attachment), nunca inline, aunque estén en la whitelist.
-INLINE_UNSAFE_EXTENSIONS = frozenset({"html", "htm", "svg", "xml", "xhtml"})
+# Únicos tipos que se sirven inline (visor en el navegador). Allowlist
+# fail-closed: cualquier otra cosa se sirve como descarga (attachment), aunque
+# esté en la whitelist de subida. Filtrar por lo seguro-conocido — no por una
+# lista negra de lo peligroso — evita que un tipo ejecutable no contemplado se
+# cuele como inline.
+INLINE_SAFE_EXTENSIONS = frozenset({"pdf", "png", "jpg", "jpeg", "gif", "webp"})
 
 
 def _extension_of(name: str | None) -> str:
@@ -857,7 +859,6 @@ class AcademicService:
         unit_id: int,
         data: MaterialCreate,
         file_bytes: bytes | None,
-        content_type: str | None,
         requesting_user_id: int,
         file_name: str | None = None,
     ) -> LmsMaterial:
@@ -870,17 +871,24 @@ class AcademicService:
         file_key = None
         stored_file_name = None
         if file_bytes is not None:
-            # Se preserva la extensión y el content-type reales (ya no se fuerza
-            # .pdf). La whitelist server-side cierra el hueco de subir cualquier
-            # cosa por API — no confiar solo en el `accept` del navegador.
+            # Se preserva la extensión real (ya no se fuerza .pdf). La whitelist
+            # server-side cierra el hueco de subir cualquier cosa por API — no
+            # confiar solo en el `accept` del navegador.
             ext = _extension_of(file_name)
             if ext not in ALLOWED_MATERIAL_EXTENSIONS:
                 raise ValueError(
                     f"Tipo de archivo no permitido: .{ext or '(sin extensión)'}"
                 )
+            # Normaliza el `type` a partir del archivo real (no del dropdown):
+            # PDF para .pdf, FILE para el resto. Evita incoherencia type/extensión
+            # (un .png marcado 'PDF' rompería el visor).
+            data.type = "PDF" if ext == "pdf" else "FILE"
             file_key = f"academic/{course.id}/materials/{uuid4()}.{ext}"
+            # El content-type se ancla desde la extensión validada, NUNCA desde
+            # el cliente: confiar en file.content_type permitiría guardar un .png
+            # con text/html y servirlo inline → XSS almacenado same-origin.
             storage_service.upload_file(
-                file_bytes, file_key, content_type or "application/octet-stream"
+                file_bytes, file_key, self._detect_content_type(file_name)
             )
             stored_file_name = file_name
 
@@ -1149,11 +1157,19 @@ class AcademicService:
             if not material.is_published:
                 raise PermissionError("Material no disponible")
 
-        # Los tipos que el navegador ejecutaría (HTML, SVG…) se sirven SIEMPRE
-        # como descarga, nunca inline, para evitar XSS almacenado al abrirlos.
+        # Solo PDF e imágenes se sirven inline (visor); todo lo demás (HTML,
+        # código, ofimática…) va como descarga → un HTML no se ejecuta en el
+        # navegador. Además se fuerza el content-type servido desde la extensión
+        # validada, no desde lo que se guardó en el objeto: así, aunque un objeto
+        # tuviera un content-type manipulado, MinIO devuelve el tipo seguro.
         ext = _extension_of(material.file_name) or _extension_of(material.file_key)
-        inline = ext not in INLINE_UNSAFE_EXTENSIONS
-        url = storage_service.generate_presigned_url(material.file_key, inline=inline)
+        inline = ext in INLINE_SAFE_EXTENSIONS
+        safe_content_type = self._detect_content_type(
+            material.file_name or material.file_key
+        )
+        url = storage_service.generate_presigned_url(
+            material.file_key, inline=inline, content_type=safe_content_type
+        )
         return {"url": url, "file_name": material.file_name}
 
     def get_material_download_url(
