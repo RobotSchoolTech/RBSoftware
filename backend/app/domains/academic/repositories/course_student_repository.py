@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.domains.academic.models.lms_course import LmsCourse
@@ -68,6 +69,28 @@ class CourseStudentRepository:
                 LmsCourse.is_active.is_(True),
             )
             .order_by(LmsCourse.name)
+        )
+        return list(self.session.exec(stmt).all())
+
+    def courses_by_emails(self, emails: list[str]) -> list[tuple[str, str]]:
+        """(email, nombre del curso) de cada matrícula activa de los estudiantes
+        cuyo email esté en la lista. Un estudiante en varios cursos activos
+        aparece varias veces. El vínculo estudiante↔curso es por email (el mismo
+        de auth). Lo consume el portal para mostrar el curso al repartir
+        contraseñas y no revolver la entrega."""
+        norm = [e.strip().lower() for e in emails if e and e.strip()]
+        if not norm:
+            return []
+        stmt = (
+            select(User.email, LmsCourse.name)
+            .join(LmsCourseStudent, LmsCourseStudent.user_id == User.id)
+            .join(LmsCourse, LmsCourse.id == LmsCourseStudent.course_id)
+            .where(
+                func.lower(User.email).in_(norm),
+                LmsCourseStudent.is_active.is_(True),
+                LmsCourse.is_active.is_(True),
+            )
+            .order_by(User.email, LmsCourse.name)
         )
         return list(self.session.exec(stmt).all())
 
