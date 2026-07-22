@@ -40,13 +40,11 @@ async def submit_assignment(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Assignment not found")
     file_bytes = None
     file_name = None
-    content_type = None
     if file is not None:
         file_bytes = await file.read()
         if len(file_bytes) > 100 * 1024 * 1024:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "File size exceeds 100 MB limit")
         file_name = file.filename
-        content_type = file.content_type
     try:
         submission = _svc.submit(
             session,
@@ -55,7 +53,6 @@ async def submit_assignment(
             content,
             file_bytes,
             file_name,
-            content_type,
         )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))

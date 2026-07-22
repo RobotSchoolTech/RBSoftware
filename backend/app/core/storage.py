@@ -5,6 +5,44 @@ from datetime import timedelta
 import uuid
 from app.core.config import settings
 
+# ── Servido seguro de archivos subidos por usuarios ──────────────────────────
+# Fuente ÚNICA de la política. Cualquier dominio (academic, training, …) que
+# sirva un archivo que subió un usuario debe pasar por aquí, para no tener que
+# repetir la allowlist y arriesgar drift entre módulos.
+
+# Únicos tipos que se sirven inline (visor en el navegador). Allowlist
+# fail-closed: cualquier otra cosa se sirve como descarga (attachment). Filtrar
+# por lo seguro-conocido — no por lista negra de lo peligroso — evita que un
+# tipo ejecutable no contemplado (html, svg, xml…) se cuele como inline y
+# ejecute script same-origin (XSS almacenado).
+INLINE_SAFE_EXTENSIONS = frozenset({"pdf", "png", "jpg", "jpeg", "gif", "webp"})
+
+_CONTENT_TYPE_BY_EXTENSION = {
+    "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+}
+
+
+def extension_of(name: str | None) -> str:
+    """Extensión en minúscula sin punto, o '' si no tiene."""
+    if not name or "." not in name:
+        return ""
+    return name.rsplit(".", 1)[-1].lower()
+
+
+def safe_content_type(file_name: str | None) -> str:
+    """Content-type derivado de la EXTENSIÓN, nunca del cliente. Lo no
+    conocido-seguro cae a application/octet-stream para que el navegador no lo
+    interprete como algo ejecutable."""
+    return _CONTENT_TYPE_BY_EXTENSION.get(
+        extension_of(file_name), "application/octet-stream"
+    )
+
+
 class StorageService:
 
     def __init__(self):
@@ -63,6 +101,28 @@ class StorageService:
             1,
         )
         return url
+
+    def generate_view_url(
+        self,
+        key: str,
+        file_name: str | None = None,
+        expires_seconds: int = 3600,
+    ) -> str:
+        """URL de VISUALIZACIÓN segura para un archivo subido por un usuario.
+
+        Punto único donde se decide "esto se puede abrir en el navegador":
+        sirve inline solo los tipos seguros-conocidos (PDF e imágenes) y todo lo
+        demás como descarga (attachment). Además ancla el content-type servido
+        desde la extensión —no desde el que quedó guardado en el objeto, que
+        pudo fijar el cliente—. Cierra el XSS almacenado same-origin.
+        """
+        ext = extension_of(file_name) or extension_of(key)
+        return self.generate_presigned_url(
+            key,
+            expires_seconds=expires_seconds,
+            inline=ext in INLINE_SAFE_EXTENSIONS,
+            content_type=safe_content_type(file_name or key),
+        )
 
     def generate_presigned_put_url(self, key: str, expires_seconds: int = 3600) -> str:
         url = self.client.presigned_put_object(

@@ -5,7 +5,11 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Session, select
 
-from app.core.storage import storage_service
+from app.core.storage import (
+    storage_service,
+    extension_of as _extension_of,
+    safe_content_type,
+)
 from app.domains.academic.models.lms_assignment import LmsAssignment
 from app.domains.academic.models.lms_course import LmsCourse
 from app.domains.academic.models.lms_grade import LmsGrade
@@ -59,19 +63,9 @@ ALLOWED_MATERIAL_EXTENSIONS = frozenset(
     }
 )
 
-# Únicos tipos que se sirven inline (visor en el navegador). Allowlist
-# fail-closed: cualquier otra cosa se sirve como descarga (attachment), aunque
-# esté en la whitelist de subida. Filtrar por lo seguro-conocido — no por una
-# lista negra de lo peligroso — evita que un tipo ejecutable no contemplado se
-# cuele como inline.
-INLINE_SAFE_EXTENSIONS = frozenset({"pdf", "png", "jpg", "jpeg", "gif", "webp"})
-
-
-def _extension_of(name: str | None) -> str:
-    """Extensión en minúscula sin punto, o '' si no tiene."""
-    if not name or "." not in name:
-        return ""
-    return name.rsplit(".", 1)[-1].lower()
+# La política de servido inline (INLINE_SAFE_EXTENSIONS) y el content-type
+# seguro (safe_content_type) viven en app.core.storage — fuente única
+# compartida con los demás dominios. Se importan arriba.
 
 
 class AcademicService:
@@ -85,17 +79,8 @@ class AcademicService:
 
     @staticmethod
     def _detect_content_type(file_name: str | None) -> str:
-        if not file_name:
-            return "application/octet-stream"
-        ext = file_name.rsplit(".", 1)[-1].lower()
-        return {
-            "pdf": "application/pdf",
-            "png": "image/png",
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "gif": "image/gif",
-            "webp": "image/webp",
-        }.get(ext, "application/octet-stream")
+        # Delegado a la fuente única en app.core.storage.
+        return safe_content_type(file_name)
 
     def _assert_admin_or_director(
         self, session: Session, grade_id: int, user_id: int
@@ -1157,18 +1142,10 @@ class AcademicService:
             if not material.is_published:
                 raise PermissionError("Material no disponible")
 
-        # Solo PDF e imágenes se sirven inline (visor); todo lo demás (HTML,
-        # código, ofimática…) va como descarga → un HTML no se ejecuta en el
-        # navegador. Además se fuerza el content-type servido desde la extensión
-        # validada, no desde lo que se guardó en el objeto: así, aunque un objeto
-        # tuviera un content-type manipulado, MinIO devuelve el tipo seguro.
-        ext = _extension_of(material.file_name) or _extension_of(material.file_key)
-        inline = ext in INLINE_SAFE_EXTENSIONS
-        safe_content_type = self._detect_content_type(
-            material.file_name or material.file_key
-        )
-        url = storage_service.generate_presigned_url(
-            material.file_key, inline=inline, content_type=safe_content_type
+        # Servido seguro (inline fail-closed + content-type anclado a la
+        # extensión). Un HTML/SVG se entrega como descarga, no se ejecuta.
+        url = storage_service.generate_view_url(
+            material.file_key, material.file_name or material.file_key
         )
         return {"url": url, "file_name": material.file_name}
 
@@ -1269,7 +1246,6 @@ class AcademicService:
         content: str | None,
         file_bytes: bytes | None,
         file_name: str | None,
-        content_type: str | None,
     ) -> LmsSubmission:
         assignment = AssignmentRepository(session).get_by_id(assignment_id)
         if assignment is None:
@@ -1292,13 +1268,16 @@ class AcademicService:
 
         file_key = None
         if file_bytes is not None and file_name is not None:
-            ext = file_name.rsplit(".", 1)[-1]
+            ext = _extension_of(file_name)
+            suffix = f".{ext}" if ext else ""
             key = (
                 f"academic/{course.id}/submissions"
-                f"/{assignment_id}/{student_id}/{uuid4()}.{ext}"
+                f"/{assignment_id}/{student_id}/{uuid4()}{suffix}"
             )
+            # Content-type anclado desde la extensión, NUNCA del cliente: evita
+            # guardar la entrega como text/html y servirla inline (XSS).
             storage_service.upload_file(
-                file_bytes, key, content_type or "application/octet-stream"
+                file_bytes, key, safe_content_type(file_name)
             )
             file_key = key
 
@@ -1381,13 +1360,15 @@ class AcademicService:
         if not submission.file_key:
             raise ValueError("Esta entrega no tiene archivo adjunto")
 
-        url = storage_service.generate_presigned_url(
-            submission.file_key, expires_seconds=3600, inline=True
+        # Servido seguro: una entrega .html subida por un estudiante se entrega
+        # como descarga y con content-type anclado, no se ejecuta inline (XSS).
+        url = storage_service.generate_view_url(
+            submission.file_key, submission.file_name or submission.file_key
         )
         return {
             "url": url,
             "file_name": submission.file_name,
-            "content_type": self._detect_content_type(submission.file_name),
+            "content_type": safe_content_type(submission.file_name),
         }
 
     def get_submission_download_url(
