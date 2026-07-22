@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/use-toast'
 import { LOGROS, LOGRO_LABELS } from '@/lib/logros'
 import * as academicService from '@/services/academic'
 import type { AssignmentRead } from '@/lib/types'
@@ -22,6 +23,30 @@ export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [savingLogro, setSavingLogro] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  async function handleDelete(id: string, title: string) {
+    if (
+      !window.confirm(
+        `¿Borrar la tarea "${title}"? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      return
+    }
+    setDeleting(id)
+    try {
+      await academicService.deleteAssignment(id)
+      toast({ title: 'Tarea eliminada', variant: 'success' })
+      onChanged()
+    } catch (err: any) {
+      toast({
+        title: err?.detail ?? 'No se pudo borrar la tarea',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   async function handleTogglePublish(id: string, isPublished: boolean) {
     setToggling(id)
@@ -118,14 +143,24 @@ export function AssignmentsTab({ unitId, assignments, onChanged, canEditContent 
                 Máx: {a.max_score}
               </span>
               {canEditContent && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={toggling === a.public_id}
-                  onClick={() => handleTogglePublish(a.public_id, a.is_published)}
-                >
-                  {a.is_published ? 'Despublicar' : 'Publicar'}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={toggling === a.public_id}
+                    onClick={() => handleTogglePublish(a.public_id, a.is_published)}
+                  >
+                    {a.is_published ? 'Despublicar' : 'Publicar'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={deleting === a.public_id}
+                    onClick={() => handleDelete(a.public_id, a.title)}
+                  >
+                    <Trash2 size={14} className="text-destructive" />
+                  </Button>
+                </>
               )}
             </div>
           </div>

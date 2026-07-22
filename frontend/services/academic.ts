@@ -282,6 +282,10 @@ export function unpublishAssignment(assignmentId: string) {
   return api.delete(`/academic/assignments/${assignmentId}/publish`)
 }
 
+export function deleteAssignment(assignmentId: string) {
+  return api.delete(`/academic/assignments/${assignmentId}`)
+}
+
 export function getAssignmentSubmissions(assignmentId: string) {
   return api.get<SubmissionWithStudent[]>(
     `/academic/assignments/${assignmentId}/submissions`,

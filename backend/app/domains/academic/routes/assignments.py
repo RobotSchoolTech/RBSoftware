@@ -76,6 +76,23 @@ def update_assignment(
     return AssignmentRead.model_validate(updated)
 
 
+@router.delete("/assignments/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_assignment(
+    assignment_id: UUID,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_roles("ADMIN", "TEACHER")),
+):
+    assignment = AssignmentRepository(session).get_by_public_id(assignment_id)
+    if assignment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assignment not found")
+    try:
+        _svc.delete_assignment(session, assignment.id, current_user.id)
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+
 @router.post(
     "/assignments/{assignment_id}/publish",
     status_code=status.HTTP_204_NO_CONTENT,
