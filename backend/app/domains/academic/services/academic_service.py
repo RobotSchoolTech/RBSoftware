@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlmodel import Session, select
@@ -46,6 +46,34 @@ from app.domains.repository.models.repository_file import RepositoryFile
 from app.domains.repository.services.visibility import can_see_file, get_user_scopes
 
 _audit = AuditService()
+
+
+# Colombia y Ecuador (las líneas de trabajo del LMS) son UTC-5 fijo, sin horario
+# de verano. Se usa un offset constante en vez de zoneinfo para no depender de
+# tzdata en Windows/dev. Revisar si el LMS se expande a otra zona horaria.
+_LOCAL_UTC_OFFSET = timedelta(hours=5)
+
+
+def is_submission_late(
+    submitted_at: datetime | None, due_date: datetime | None
+) -> bool:
+    """¿La entrega fue posterior al límite?
+
+    Marcador suave (no bloquea la entrega). Solo aplica si la actividad tiene
+    fecha límite y la entrega ya ocurrió.
+
+    Las dos marcas viven en referencias distintas en la BD: ``submitted_at`` se
+    guarda en UTC (``datetime.now(timezone.utc)`` server-side) y ``due_date`` en
+    hora local (el calendario la manda como wall-clock local, igual que el viejo
+    ``datetime-local``). MySQL devuelve ambas naive en columnas
+    ``DateTime(timezone=True)``, así que hay que llevar ``submitted_at`` a hora
+    local antes de comparar; compararlas crudas daría un sesgo de 5 h.
+    """
+    if submitted_at is None or due_date is None:
+        return False
+    submitted_local = submitted_at.replace(tzinfo=None) - _LOCAL_UTC_OFFSET
+    due = due_date.replace(tzinfo=None)
+    return submitted_local > due
 
 
 class AcademicService:

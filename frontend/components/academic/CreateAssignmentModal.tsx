@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { LOGROS, LOGRO_LABELS } from '@/lib/logros'
 import * as academicService from '@/services/academic'
 
@@ -16,7 +17,7 @@ interface Props {
 export function CreateAssignmentModal({ unitId, onClose, onCreated }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [dueDate, setDueDate] = useState('')
+  const [dueDate, setDueDate] = useState<string | null>(null)
   const [maxScore, setMaxScore] = useState('100')
   const [logro, setLogro] = useState('')
   const [saving, setSaving] = useState(false)
@@ -73,10 +74,10 @@ export function CreateAssignmentModal({ unitId, onClose, onCreated }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium">Fecha límite</label>
-              <Input
-                type="datetime-local"
+              <DateTimePicker
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={setDueDate}
+                disablePast
               />
             </div>
             <div className="space-y-1">

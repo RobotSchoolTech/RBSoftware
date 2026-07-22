@@ -68,6 +68,7 @@ class SubmissionWithStudent(SQLModel):
     graded_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    is_late: bool = False
     student: UserRead
 
 

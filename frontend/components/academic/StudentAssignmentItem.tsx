@@ -47,6 +47,7 @@ export function StudentAssignmentItem({ assignment, onSubmitted }: Props) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {sub?.is_late && <Badge variant="destructive">Tarde</Badge>}
             {statusBadge(sub)}
             <span className="text-xs text-muted-foreground">
               /{assignment.max_score}

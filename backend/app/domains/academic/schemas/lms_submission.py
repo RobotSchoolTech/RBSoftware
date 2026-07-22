@@ -21,6 +21,10 @@ class SubmissionRead(SQLModel):
     graded_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    # Marcador suave de entrega tardía. No vive en el modelo: lo calcula la ruta
+    # comparando submitted_at contra el due_date de la actividad (que no está en
+    # el ORM de la submission). Default False para el caso sin fecha límite.
+    is_late: bool = False
 
 
 class SubmissionUpdate(SQLModel):
