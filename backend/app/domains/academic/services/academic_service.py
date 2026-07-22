@@ -14,6 +14,7 @@ from app.domains.academic.models.lms_assignment import LmsAssignment
 from app.domains.academic.models.lms_course import LmsCourse
 from app.domains.academic.models.lms_grade import LmsGrade
 from app.domains.academic.models.lms_material import LmsMaterial
+from app.domains.academic.models.pdf_annotation import PDFAnnotation
 from app.domains.academic.models.lms_submission import LmsSubmission, SubmissionStatus
 from app.domains.academic.models.lms_unit import LmsUnit
 from app.domains.academic.models.school import School
@@ -956,7 +957,7 @@ class AcademicService:
 
         annotations = len(
             session.exec(
-                select(PdfAnnotation).where(PdfAnnotation.material_id == material.id)
+                select(PDFAnnotation).where(PDFAnnotation.material_id == material.id)
             ).all()
         )
         return {
