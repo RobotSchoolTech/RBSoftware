@@ -21,10 +21,16 @@ interface Props {
 const TYPE_OPTIONS = [
   { value: 'REPO', label: 'Desde repositorio' },
   { value: 'PDF', label: 'PDF (subir archivo)' },
+  { value: 'FILE', label: 'Archivo (código, programación, imagen…)' },
   { value: 'VIDEO', label: 'Video (URL)' },
   { value: 'LINK', label: 'Enlace' },
   { value: 'TEXT', label: 'Texto' },
 ] as const
+
+// Debe reflejar ALLOWED_MATERIAL_EXTENSIONS del backend. El `accept` es solo una
+// guía en el navegador; la whitelist real la valida el backend.
+const FILE_ACCEPT =
+  '.pdf,.html,.ino,.mblock,.sb3,.py,.txt,.json,.zip,.png,.jpg,.jpeg,.docx,.pptx,.xlsx'
 
 export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
   const [title, setTitle] = useState('')
@@ -58,6 +64,11 @@ export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
           file_id: repoFile.public_id,
         })
       } else {
+        if ((type === 'PDF' || type === 'FILE') && !file) {
+          setError('Selecciona un archivo')
+          setSaving(false)
+          return
+        }
         await academicService.addMaterial(
           unitId,
           {
@@ -68,7 +79,7 @@ export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
                 ? content.trim() || null
                 : null,
           },
-          type === 'PDF' && file ? file : undefined,
+          (type === 'PDF' || type === 'FILE') && file ? file : undefined,
         )
       }
       onCreated()
@@ -163,6 +174,22 @@ export function AddMaterialModal({ unitId, onClose, onCreated }: Props) {
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className="w-full text-sm"
               />
+            </div>
+          )}
+
+          {type === 'FILE' && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Archivo</label>
+              <input
+                type="file"
+                accept={FILE_ACCEPT}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className="w-full text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                PDF, HTML, Arduino (.ino), mBlock (.mblock/.sb3), código, imágenes
+                y ofimática.
+              </p>
             </div>
           )}
 

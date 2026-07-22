@@ -62,7 +62,6 @@ async def submit_practical(
 ):
     file_bytes = None
     file_name = None
-    content_type = None
     if file is not None:
         file_bytes = await file.read()
         if len(file_bytes) > 100 * 1024 * 1024:
@@ -70,7 +69,6 @@ async def submit_practical(
                 status.HTTP_400_BAD_REQUEST, "El archivo excede 100 MB"
             )
         file_name = file.filename
-        content_type = file.content_type
     try:
         submission = _svc.submit_practical(
             session,
@@ -79,7 +77,6 @@ async def submit_practical(
             content,
             file_bytes,
             file_name,
-            content_type,
         )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
@@ -139,8 +136,10 @@ def view_submission(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Entrega no encontrada")
     if not submission.file_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta entrega no tiene archivo")
-    url = storage_service.generate_presigned_url(
-        submission.file_key, expires_seconds=3600, inline=True
+    # Servido seguro: una entrega .html subida por un docente se entrega como
+    # descarga y con content-type anclado, no se ejecuta inline (XSS).
+    url = storage_service.generate_view_url(
+        submission.file_key, submission.file_name
     )
     return {
         "url": url,

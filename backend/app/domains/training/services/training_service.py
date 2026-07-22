@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlmodel import Session, select
 
 from app.core.identifiers import parse_public_id
-from app.core.storage import storage_service
+from app.core.storage import storage_service, extension_of, safe_content_type
 from app.domains.repository.models.repository_file import RepositoryFile
 from app.domains.audit.services import AuditService
 from app.domains.auth.repositories import UserRepository
@@ -472,7 +472,6 @@ class TrainingService:
         content: str | None,
         file_bytes: bytes | None,
         file_name: str | None,
-        content_type: str | None,
     ):
         evaluation = EvaluationRepository(session).get_by_public_id(evaluation_id)
         if evaluation is None:
@@ -487,13 +486,16 @@ class TrainingService:
 
         file_key = None
         if file_bytes is not None and file_name is not None:
-            ext = file_name.rsplit(".", 1)[-1] if "." in file_name else "bin"
+            ext = extension_of(file_name)
+            suffix = f".{ext}" if ext else ""
             file_key = (
                 f"training/{module.program_id}/submissions"
-                f"/{evaluation.id}/{user_id}/{uuid4()}.{ext}"
+                f"/{evaluation.id}/{user_id}/{uuid4()}{suffix}"
             )
+            # Content-type anclado desde la extensión, NUNCA del cliente: evita
+            # guardar la entrega como text/html y servirla inline (XSS).
             storage_service.upload_file(
-                file_bytes, file_key, content_type or "application/octet-stream"
+                file_bytes, file_key, safe_content_type(file_name)
             )
 
         result = SubmissionRepository(session).upsert(
