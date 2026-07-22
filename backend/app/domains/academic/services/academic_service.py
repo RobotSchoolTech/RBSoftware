@@ -1237,46 +1237,6 @@ class AcademicService:
         self._assert_admin_or_teacher(session, course, user_id)
         return SubmissionRepository(session).get_by_assignment(assignment.id)
 
-    def delete_assignment(
-        self, session: Session, assignment_id: int, requesting_user_id: int
-    ) -> None:
-        """Borra una tarea. Se bloquea si tiene entregas: las entregas son
-        trabajo calificado del estudiante y no se pierden por un borrado —a
-        diferencia de las anotaciones de un material—. El docente debe resolver
-        las entregas antes (calificar, exportar) para no destruir evidencia.
-        """
-        repo = AssignmentRepository(session)
-        assignment = repo.get_by_id(assignment_id)
-        if assignment is None:
-            raise LookupError("Assignment not found")
-        unit = UnitRepository(session).get_by_id(assignment.unit_id)
-        course = CourseRepository(session).get_by_id(unit.course_id)
-        self._assert_admin_or_teacher(session, course, requesting_user_id)
-
-        submissions = SubmissionRepository(session).get_by_assignment(assignment.id)
-        if submissions:
-            raise ValueError(
-                f"La tarea tiene {len(submissions)} entrega(s) y no se puede "
-                "borrar. Elimina o exporta las entregas antes de borrar la tarea."
-            )
-
-        payload = {
-            "title": assignment.title,
-            "unit_id": assignment.unit_id,
-            "course_id": course.id,
-        }
-        assignment_id_val = assignment.id
-        repo.delete(assignment)
-
-        _audit.log(
-            session,
-            user_id=requesting_user_id,
-            action="academic.assignment.deleted",
-            resource_type="lms_assignment",
-            resource_id=str(assignment_id_val),
-            payload=payload,
-        )
-
     # ── Submissions ──────────────────────────────────────────────────────────
 
     def submit(
