@@ -56,14 +56,16 @@ async def create_lesson(
     current_user: User = Depends(require_roles("ADMIN", "TRAINER", "SUPER_TRAINER")),
 ):
     file_bytes = None
-    content_type = None
+    file_name = None
     if file is not None:
         file_bytes = await file.read()
         if len(file_bytes) > 100 * 1024 * 1024:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, "El archivo excede 100 MB"
             )
-        content_type = file.content_type
+        # El nombre —no el content-type que declara el cliente— es lo que decide
+        # la extensión y el content-type con el que se guarda y se sirve.
+        file_name = file.filename
     data = LessonCreate(
         title=title,
         type=type,
@@ -73,7 +75,7 @@ async def create_lesson(
     )
     try:
         lesson = _svc.create_lesson(
-            session, module_id, data, file_bytes, content_type, current_user.id
+            session, module_id, data, file_bytes, file_name, current_user.id
         )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
@@ -214,5 +216,8 @@ def view_lesson(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lección no encontrada")
     if not lesson.file_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta lección no tiene archivo")
-    url = storage_service.generate_presigned_url(lesson.file_key, inline=True)
+    # Servido seguro: la extensión del key decide inline vs. attachment y ancla
+    # el content-type. Una lección creada desde el repositorio puede apuntar a
+    # un archivo arbitrario (.html, .svg) → se descarga en vez de ejecutarse.
+    url = storage_service.generate_view_url(lesson.file_key)
     return {"url": url}

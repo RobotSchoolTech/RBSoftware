@@ -15,7 +15,13 @@ from app.core.config import settings
 # por lo seguro-conocido — no por lista negra de lo peligroso — evita que un
 # tipo ejecutable no contemplado (html, svg, xml…) se cuele como inline y
 # ejecute script same-origin (XSS almacenado).
-INLINE_SAFE_EXTENSIONS = frozenset({"pdf", "png", "jpg", "jpeg", "gif", "webp"})
+#
+# Los formatos de video (mp4/webm) están en la lista porque el visor de lecciones
+# de `training` los reproduce embebidos: el navegador los decodifica como media,
+# nunca como documento, así que no pueden ejecutar script same-origin.
+INLINE_SAFE_EXTENSIONS = frozenset(
+    {"pdf", "png", "jpg", "jpeg", "gif", "webp", "mp4", "webm"}
+)
 
 _CONTENT_TYPE_BY_EXTENSION = {
     "pdf": "application/pdf",
@@ -24,6 +30,8 @@ _CONTENT_TYPE_BY_EXTENSION = {
     "jpeg": "image/jpeg",
     "gif": "image/gif",
     "webp": "image/webp",
+    "mp4": "video/mp4",
+    "webm": "video/webm",
 }
 
 
@@ -121,6 +129,25 @@ class StorageService:
             key,
             expires_seconds=expires_seconds,
             inline=ext in INLINE_SAFE_EXTENSIONS,
+            content_type=safe_content_type(file_name or key),
+        )
+
+    def generate_download_url(
+        self,
+        key: str,
+        file_name: str | None = None,
+        expires_seconds: int = 3600,
+    ) -> str:
+        """URL de DESCARGA (siempre attachment) para un archivo de un usuario.
+
+        El `attachment` ya impide que el navegador lo interprete, pero se ancla
+        igual el content-type desde la extensión para no depender del que el
+        cliente fijó al subir.
+        """
+        return self.generate_presigned_url(
+            key,
+            expires_seconds=expires_seconds,
+            inline=False,
             content_type=safe_content_type(file_name or key),
         )
 

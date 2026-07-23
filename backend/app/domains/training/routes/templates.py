@@ -122,7 +122,7 @@ def download_template(
                 "No tienes acceso a esta plantilla",
             )
 
-    url = storage_service.generate_presigned_url(
-        template.file_key, expires_seconds=300, inline=False
+    url = storage_service.generate_download_url(
+        template.file_key, template.file_name, expires_seconds=300
     )
     return {"url": url, "file_name": template.file_name}

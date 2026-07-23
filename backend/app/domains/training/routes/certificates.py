@@ -7,7 +7,7 @@ from sqlmodel import Session
 
 from app.core.database import get_session
 from app.core.permissions import require_roles
-from app.core.storage import storage_service
+from app.core.storage import storage_service, safe_content_type
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
 from app.domains.auth.repositories import UserRepository
@@ -120,16 +120,15 @@ def upload_certificate_template(
 
     ext = "png" if file.content_type == "image/png" else "jpg"
     key = f"training/certificates/templates/{program.public_id}.{ext}"
-    storage_service.upload_file(file.file.read(), key, file.content_type)
+    # Content-type anclado desde la extensión, no el que declaró el cliente.
+    storage_service.upload_file(file.file.read(), key, safe_content_type(key))
 
     program.certificate_template_key = key
     session.add(program)
     session.commit()
 
     return {
-        "template_url": storage_service.generate_presigned_url(
-            key, expires_seconds=3600
-        )
+        "template_url": storage_service.generate_view_url(key, expires_seconds=3600)
     }
 
 
@@ -145,7 +144,7 @@ def get_certificate_template(
     if not program.certificate_template_key:
         return {"template_url": None}
     return {
-        "template_url": storage_service.generate_presigned_url(
+        "template_url": storage_service.generate_view_url(
             program.certificate_template_key, expires_seconds=3600
         )
     }
