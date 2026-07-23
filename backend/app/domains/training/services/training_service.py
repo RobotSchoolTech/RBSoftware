@@ -46,6 +46,36 @@ from app.domains.training.schemas.training_quiz_question import (
 
 _audit = AuditService()
 
+# Extensiones admitidas al subir el archivo de una lección, por tipo. Es un
+# subconjunto de INLINE_SAFE_EXTENSIONS: lo que se admite subir tiene que poder
+# servirse inline, porque el visor de lecciones lo abre embebido.
+LESSON_FILE_EXTENSIONS = {
+    "PDF": frozenset({"pdf"}),
+    "VIDEO": frozenset({"mp4", "webm"}),
+}
+
+
+def resolve_lesson_file_extension(lesson_type: str, *names: str | None) -> str:
+    """Extensión validada del archivo de una lección, o ValueError.
+
+    La extensión sale del NOMBRE del archivo, nunca del content-type que declara
+    el cliente: un `.html` anunciado como `application/pdf` terminaba guardado
+    como text/html y el visor lo abría en un iframe (XSS almacenado same-origin).
+
+    Cuando se conoce más de un nombre para el mismo archivo —el key que generó el
+    servidor y el nombre que declaró el cliente— se exige que TODOS coincidan en
+    una extensión admitida. Si divergen, el archivo no es lo que dice ser y no
+    hay una de las dos fuentes que merezca más confianza que la otra.
+    """
+    allowed = LESSON_FILE_EXTENSIONS[lesson_type]
+    extensions = {ext for ext in map(extension_of, names) if ext}
+    if not extensions or not extensions <= allowed:
+        raise ValueError(
+            f"Una lección {lesson_type} solo admite archivos "
+            f"{', '.join('.' + e for e in sorted(allowed))}"
+        )
+    return extensions.pop()
+
 
 class TrainingService:
 
@@ -164,7 +194,7 @@ class TrainingService:
         module_id: UUID,
         data: LessonCreate,
         file_bytes: bytes | None,
-        content_type: str | None,
+        file_name: str | None,
         requesting_user_id: int,
     ):
         self._assert_admin_or_trainer(session, requesting_user_id)
@@ -174,17 +204,11 @@ class TrainingService:
 
         file_key = None
         if data.type in ("PDF", "VIDEO") and file_bytes is not None:
-            ext = "pdf" if data.type == "PDF" else "mp4"
-            if content_type:
-                ext_map = {
-                    "application/pdf": "pdf",
-                    "video/mp4": "mp4",
-                    "video/webm": "webm",
-                }
-                ext = ext_map.get(content_type, ext)
+            ext = resolve_lesson_file_extension(data.type, file_name)
             file_key = f"training/{module.program_id}/lessons/{uuid4()}.{ext}"
+            # Content-type anclado desde la extensión, NUNCA del cliente.
             storage_service.upload_file(
-                file_bytes, file_key, content_type or "application/octet-stream"
+                file_bytes, file_key, safe_content_type(file_key)
             )
 
         existing = LessonRepository(session).list_by_module(module.id)
@@ -217,6 +241,14 @@ class TrainingService:
 
         if data.type not in ("PDF", "VIDEO"):
             raise ValueError("El tipo debe ser PDF o VIDEO")
+
+        # El repositorio admite cualquier extensión, así que la lección hereda un
+        # archivo no controlado: se valida igual que en la subida directa. Sin
+        # esto la lección quedaría creada pero el visor no podría mostrarla (el
+        # servido seguro la degradaría a descarga).
+        resolve_lesson_file_extension(
+            data.type, repo_file.file_key, repo_file.file_name
+        )
 
         existing = LessonRepository(session).list_by_module(module.id)
         data_with_file = LessonCreate.model_validate(

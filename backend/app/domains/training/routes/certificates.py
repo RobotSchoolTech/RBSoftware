@@ -7,7 +7,7 @@ from sqlmodel import Session
 
 from app.core.database import get_session
 from app.core.permissions import require_roles
-from app.core.storage import storage_service
+from app.core.storage import storage_service, extension_of, safe_content_type
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
 from app.domains.auth.repositories import UserRepository
@@ -109,7 +109,12 @@ def upload_certificate_template(
     session: Session = Depends(get_session),
     _: User = Depends(require_roles("ADMIN", "SUPER_TRAINER")),
 ):
-    if file.content_type not in ("image/png", "image/jpeg"):
+    # La extensión sale del NOMBRE del archivo, no del content-type que declara
+    # el cliente: anclar el content-type a una extensión que el propio cliente
+    # eligió sería circular, y guardaba un JPG como .png (plantilla en blanco,
+    # sin error visible).
+    ext = extension_of(file.filename)
+    if ext not in ("png", "jpg", "jpeg"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Solo se permiten PNG o JPG",
@@ -118,18 +123,15 @@ def upload_certificate_template(
     if program is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Programa no encontrado")
 
-    ext = "png" if file.content_type == "image/png" else "jpg"
     key = f"training/certificates/templates/{program.public_id}.{ext}"
-    storage_service.upload_file(file.file.read(), key, file.content_type)
+    storage_service.upload_file(file.file.read(), key, safe_content_type(key))
 
     program.certificate_template_key = key
     session.add(program)
     session.commit()
 
     return {
-        "template_url": storage_service.generate_presigned_url(
-            key, expires_seconds=3600
-        )
+        "template_url": storage_service.generate_view_url(key, expires_seconds=3600)
     }
 
 
@@ -145,7 +147,7 @@ def get_certificate_template(
     if not program.certificate_template_key:
         return {"template_url": None}
     return {
-        "template_url": storage_service.generate_presigned_url(
+        "template_url": storage_service.generate_view_url(
             program.certificate_template_key, expires_seconds=3600
         )
     }

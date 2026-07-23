@@ -1037,12 +1037,15 @@ function CreateLessonModal({ moduleId, onClose, onCreated }: {
                 </div>
               )}
               {videoMode === 'file' && sourceMode === 'upload' && (
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
-                  className="w-full text-sm border rounded-lg p-2 bg-background"
-                />
+                <div className="space-y-1">
+                  <input
+                    type="file"
+                    accept=".mp4,.webm"
+                    onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
+                    className="w-full text-sm border rounded-lg p-2 bg-background"
+                  />
+                  <p className="text-xs text-muted-foreground">Solo MP4 o WebM — son los formatos que reproduce el visor</p>
+                </div>
               )}
               {videoMode === 'file' && sourceMode === 'repository' && (
                 <RepoFilePickerField repoFile={repoFile}
@@ -1730,7 +1733,10 @@ interface AssignRepositoryModalProps {
   onSelect?: (file: RepoFile) => void
 }
 
-const VIDEO_EXTS = ['mp4', 'webm', 'mov', 'avi', 'mkv']
+// Espejo de LESSON_FILE_EXTENSIONS['VIDEO'] en el backend: son los formatos que
+// el visor reproduce. Ofrecer .mov/.avi aquí sería un callejón sin salida — el
+// picker los listaría y el servidor los rechazaría con 400 al guardar.
+const VIDEO_EXTS = ['mp4', 'webm']
 
 export function AssignRepositoryModal({
   programId,

@@ -664,7 +664,9 @@ def download_file(
     scopes = get_user_scopes(session, current_user)
     if not can_see_file(session, f, current_user, scopes):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Archivo no encontrado")
-    url = storage_service.generate_presigned_url(f.file_key, expires_seconds=300, inline=False)
+    url = storage_service.generate_download_url(
+        f.file_key, f.file_name, expires_seconds=300
+    )
     return {"url": url, "file_name": f.file_name}
 
 
@@ -678,7 +680,11 @@ def view_file(
     scopes = get_user_scopes(session, current_user)
     if not can_see_file(session, f, current_user, scopes):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Archivo no encontrado")
-    url = storage_service.generate_presigned_url(f.file_key, expires_seconds=300, inline=True)
+    # El repositorio admite cualquier extensión (incluidas .html/.svg): el
+    # servido decide inline solo para los tipos seguros y descarga el resto.
+    url = storage_service.generate_view_url(
+        f.file_key, f.file_name, expires_seconds=300
+    )
     return {"url": url, "file_name": f.file_name, "file_type": f.file_type}
 
 

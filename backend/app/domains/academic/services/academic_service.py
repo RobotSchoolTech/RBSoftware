@@ -1166,7 +1166,9 @@ class AcademicService:
         if not self._is_admin(session, requesting_user_id):
             raise PermissionError("Solo administradores pueden descargar archivos")
 
-        url = storage_service.generate_presigned_url(material.file_key, inline=False)
+        url = storage_service.generate_download_url(
+            material.file_key, material.file_name
+        )
         return {"url": url}
 
     def publish_unit(
@@ -1389,8 +1391,8 @@ class AcademicService:
         if not submission.file_key:
             raise ValueError("Esta entrega no tiene archivo adjunto")
 
-        url = storage_service.generate_presigned_url(
-            submission.file_key, expires_seconds=3600, inline=False
+        url = storage_service.generate_download_url(
+            submission.file_key, submission.file_name
         )
         return {"url": url, "file_name": submission.file_name}
 
