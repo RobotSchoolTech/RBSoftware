@@ -2,21 +2,22 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, X } from 'lucide-react'
 import type { CourseDetail, UnitRead } from '@/lib/types'
+import * as academicService from '@/services/academic'
 import { UnitsSidebar } from './UnitsSidebar'
 import { UnitDetailPanel } from './UnitDetailPanel'
 import { CreateUnitModal } from './CreateUnitModal'
 import { CourseStudentsTab } from './CourseStudentsTab'
 import { GradebookTab } from './GradebookTab'
-import { ChangeTeacherModal } from './ChangeTeacherModal'
+import { AddTeacherModal } from './AddTeacherModal'
 
 interface Props {
   course: CourseDetail
   units: UnitRead[]
   reload: () => void
   canEditContent: boolean
-  canChangeTeacher?: boolean
+  canManageTeachers?: boolean
 }
 
 type CourseTab = 'content' | 'students' | 'gradebook'
@@ -26,7 +27,7 @@ export function TeacherCourseView({
   units,
   reload,
   canEditContent,
-  canChangeTeacher = false,
+  canManageTeachers = false,
 }: Props) {
   const router = useRouter()
   const [courseTab, setCourseTab] = useState<CourseTab>(() => {
@@ -39,9 +40,24 @@ export function TeacherCourseView({
     units[0]?.public_id ?? null,
   )
   const [showCreateUnit, setShowCreateUnit] = useState(false)
-  const [showChangeTeacher, setShowChangeTeacher] = useState(false)
+  const [showAddTeacher, setShowAddTeacher] = useState(false)
+  const [removingTeacherId, setRemovingTeacherId] = useState<string | null>(null)
+  const [teacherError, setTeacherError] = useState<string | null>(null)
 
   const selectedUnit = units.find((u) => u.public_id === selectedUnitId) ?? null
+
+  async function handleRemoveTeacher(userId: string) {
+    setTeacherError(null)
+    setRemovingTeacherId(userId)
+    try {
+      await academicService.removeTeacher(course.public_id, userId)
+      reload()
+    } catch (err: any) {
+      setTeacherError(err?.detail ?? 'No se pudo quitar el docente')
+    } finally {
+      setRemovingTeacherId(null)
+    }
+  }
 
   const courseTabs: { key: CourseTab; label: string }[] = [
     { key: 'content', label: 'Contenido' },
@@ -62,14 +78,13 @@ export function TeacherCourseView({
         />
       )}
 
-      {showChangeTeacher && (
-        <ChangeTeacherModal
+      {showAddTeacher && (
+        <AddTeacherModal
           courseId={course.public_id}
           courseName={course.name}
-          currentTeacherId={course.teacher.public_id}
-          onClose={() => setShowChangeTeacher(false)}
-          onChanged={() => {
-            setShowChangeTeacher(false)
+          onClose={() => setShowAddTeacher(false)}
+          onAdded={() => {
+            setShowAddTeacher(false)
             reload()
           }}
         />
@@ -84,19 +99,39 @@ export function TeacherCourseView({
             <ArrowLeft size={12} /> Mis Cursos
           </button>
           <h1 className="text-lg font-semibold">{course.name}</h1>
-          <p className="text-xs text-muted-foreground">
-            Docente: {course.teacher.first_name} {course.teacher.last_name}
-            {canChangeTeacher && (
-              <button
-                onClick={() => setShowChangeTeacher(true)}
-                className="ml-1 font-medium text-primary hover:underline"
+          <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            <span>Docentes:</span>
+            {course.teachers.map((t) => (
+              <span
+                key={t.public_id}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5"
               >
-                Cambiar
+                {t.first_name} {t.last_name}
+                {canManageTeachers && (
+                  <button
+                    onClick={() => handleRemoveTeacher(t.public_id)}
+                    disabled={removingTeacherId === t.public_id}
+                    title="Quitar docente"
+                    className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </span>
+            ))}
+            {canManageTeachers && (
+              <button
+                onClick={() => setShowAddTeacher(true)}
+                className="font-medium text-primary hover:underline"
+              >
+                + Agregar
               </button>
             )}
-            {' · '}
-            {course.students.length} estudiantes
-          </p>
+            <span>· {course.students.length} estudiantes</span>
+          </div>
+          {teacherError && (
+            <p className="mt-1 text-xs text-destructive">{teacherError}</p>
+          )}
         </div>
 
         <div className="flex shrink-0 border-b px-4">

@@ -3,6 +3,7 @@
 from app.domains.academic.repositories.assignment_repository import AssignmentRepository
 from app.domains.academic.repositories.course_repository import CourseRepository
 from app.domains.academic.repositories.course_student_repository import CourseStudentRepository
+from app.domains.academic.repositories.course_teacher_repository import CourseTeacherRepository
 from app.domains.academic.repositories.grade_director_repository import GradeDirectorRepository
 from app.domains.academic.repositories.grade_repository import GradeRepository
 from app.domains.academic.repositories.material_repository import MaterialRepository
@@ -20,6 +21,7 @@ __all__ = [
     "GradeDirectorRepository",
     "CourseRepository",
     "CourseStudentRepository",
+    "CourseTeacherRepository",
     "UnitRepository",
     "MaterialRepository",
     "PDFAnnotationRepository",

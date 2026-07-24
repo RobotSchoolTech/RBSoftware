@@ -14,6 +14,9 @@ from app.core.permissions import require_roles
 from app.domains.academic.models.lms_course import LmsCourse
 from app.domains.academic.models.lms_course_student import LmsCourseStudent
 from app.domains.academic.models.lms_grade_director import LmsGradeDirector
+from app.domains.academic.repositories.course_teacher_repository import (
+    CourseTeacherRepository,
+)
 from app.domains.auth.dependencies import get_current_user
 from app.domains.auth.models import User
 from app.domains.auth.repositories import UserRepository
@@ -75,8 +78,10 @@ def _get_director_user_ids(session: Session, director_internal_id: int) -> list[
             ).all()
             for s in students:
                 user_ids.add(s.user_id)
-            if course.teacher_id:
-                user_ids.add(course.teacher_id)
+            # Todos los co-docentes del curso, no solo el legacy teacher_id.
+            user_ids.update(
+                CourseTeacherRepository(session).get_teacher_ids(course.id)
+            )
 
     return list(user_ids)
 

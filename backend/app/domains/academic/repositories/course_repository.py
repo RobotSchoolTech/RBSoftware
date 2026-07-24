@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from app.domains.academic.models.lms_course import LmsCourse
 from app.domains.academic.models.lms_course_student import LmsCourseStudent
+from app.domains.academic.models.lms_course_teacher import LmsCourseTeacher
 from app.domains.academic.schemas.lms_course import CourseCreate, CourseUpdate
 from app.domains.auth.models import User
 
@@ -52,7 +53,11 @@ class CourseRepository:
     def list_by_teacher(self, teacher_id: int) -> list[LmsCourse]:
         stmt = (
             select(LmsCourse)
-            .where(LmsCourse.teacher_id == teacher_id, LmsCourse.is_active.is_(True))
+            .join(LmsCourseTeacher, LmsCourseTeacher.course_id == LmsCourse.id)
+            .where(
+                LmsCourseTeacher.user_id == teacher_id,
+                LmsCourse.is_active.is_(True),
+            )
             .order_by(LmsCourse.name)
         )
         return list(self.session.exec(stmt).all())
@@ -106,13 +111,6 @@ class CourseRepository:
         updates = payload.model_dump(exclude_unset=True)
         for field_name, value in updates.items():
             setattr(course, field_name, value)
-        self.session.add(course)
-        self.session.commit()
-        self.session.refresh(course)
-        return course
-
-    def set_teacher(self, course: LmsCourse, teacher_id: int | None) -> LmsCourse:
-        course.teacher_id = teacher_id
         self.session.add(course)
         self.session.commit()
         self.session.refresh(course)

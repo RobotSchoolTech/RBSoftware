@@ -72,15 +72,17 @@ def my_courses(
 def get_course(
     course_id: UUID,
     session: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     course = CourseRepository(session).get_by_public_id(course_id)
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Course not found")
     try:
-        return _svc.get_course_detail(session, course.id)
+        return _svc.get_course_detail(session, course.id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
 
 
 @router.patch("/courses/{course_id}", response_model=CourseRead)
@@ -119,12 +121,12 @@ def list_assignable_teachers(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
 
 
-@router.post("/courses/{course_id}/teacher", status_code=status.HTTP_204_NO_CONTENT)
-def assign_teacher(
+@router.post("/courses/{course_id}/teachers", status_code=status.HTTP_204_NO_CONTENT)
+def add_course_teacher(
     course_id: UUID,
     body: TeacherBody,
     session: Session = Depends(get_session),
-    current_user: User = Depends(require_roles("ADMIN", "DIRECTOR")),
+    current_user: User = Depends(require_roles("ADMIN")),
 ):
     course = CourseRepository(session).get_by_public_id(course_id)
     if course is None:
@@ -133,7 +135,35 @@ def assign_teacher(
     if teacher is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Teacher not found")
     try:
-        _svc.assign_teacher(session, course.id, teacher.id, current_user.id)
+        _svc.add_teacher_to_course(session, course.id, teacher.id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+
+@router.delete(
+    "/courses/{course_id}/teachers/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_course_teacher(
+    course_id: UUID,
+    user_id: UUID,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_roles("ADMIN")),
+):
+    course = CourseRepository(session).get_by_public_id(course_id)
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Course not found")
+    teacher = UserRepository(session).get_by_public_id(user_id)
+    if teacher is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Teacher not found")
+    try:
+        _svc.remove_teacher_from_course(session, course.id, teacher.id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
     except PermissionError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     except ValueError as exc:

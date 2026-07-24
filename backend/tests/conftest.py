@@ -12,6 +12,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.database import get_session
 from app.core.security import hash_password
+from app.core.storage import storage_service
 
 # Import all models so SQLModel.metadata knows about every table before create_all
 from app.domains.audit.models import AuditLog  # noqa: F401
@@ -45,7 +46,13 @@ def session_fixture(engine):
 
 
 @pytest.fixture(name="client", scope="function")
-def client_fixture(session):
+def client_fixture(session, monkeypatch):
+    # El startup de la app hace ensure_bucket_exists() contra MinIO. El host
+    # `minio` solo resuelve dentro de la red de Docker: fuera de ella cada test
+    # que use este fixture se cuelga ~30 s reintentando y termina en error de
+    # conexión. Crear el bucket no es responsabilidad de un test de API.
+    monkeypatch.setattr(storage_service, "ensure_bucket_exists", lambda: None)
+
     def override_get_session():
         yield session
 

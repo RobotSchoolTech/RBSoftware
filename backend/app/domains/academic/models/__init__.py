@@ -3,6 +3,7 @@
 from app.domains.academic.models.lms_assignment import LmsAssignment
 from app.domains.academic.models.lms_course import LmsCourse
 from app.domains.academic.models.lms_course_student import LmsCourseStudent
+from app.domains.academic.models.lms_course_teacher import LmsCourseTeacher
 from app.domains.academic.models.lms_grade import LmsGrade
 from app.domains.academic.models.lms_grade_director import LmsGradeDirector
 from app.domains.academic.models.lms_material import LmsMaterial
@@ -23,6 +24,7 @@ __all__ = [
     "LmsGradeDirector",
     "LmsCourse",
     "LmsCourseStudent",
+    "LmsCourseTeacher",
     "LmsUnit",
     "LmsMaterial",
     "LmsAssignment",

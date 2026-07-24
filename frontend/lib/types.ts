@@ -277,7 +277,7 @@ export interface MyCourseRead {
   updated_at: string
   grade_name: string
   school_name: string
-  teacher_name: string
+  teacher_names: string[]
   role: 'TEACHER' | 'STUDENT'
 }
 
@@ -288,7 +288,7 @@ export interface CourseDetail {
   is_active: boolean
   created_at: string
   updated_at: string
-  teacher: User
+  teachers: User[]
   students: User[]
   units: UnitRead[]
 }
