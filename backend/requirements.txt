@@ -1,4 +1,7 @@
-fastapi>=0.110.0
+# Techo por minor: FastAPI es 0.x y cada minor puede romper. El piso 0.115 es la
+# version mas vieja que aceptamos; el techo <0.140 deja entrar 0.139.x, que es lo
+# que corre en produccion hoy. Subir el techo = probar la version primero.
+fastapi>=0.115.0,<0.140.0
 uvicorn[standard]>=0.29.0
 sqlmodel>=0.0.16
 alembic>=1.13.1
