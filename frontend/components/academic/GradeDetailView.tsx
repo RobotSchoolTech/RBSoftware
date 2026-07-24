@@ -206,8 +206,8 @@ export function GradeDetailView({ gradeId }: Props) {
                   >
                     <td className="px-4 py-3 font-medium">{c.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {c.teacher
-                        ? `${c.teacher.first_name} ${c.teacher.last_name}`
+                      {c.teachers.length > 0
+                        ? c.teachers.map((t) => `${t.first_name} ${t.last_name}`).join(', ')
                         : '—'}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">

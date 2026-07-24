@@ -82,7 +82,7 @@ export function MyCoursesView() {
               {c.role === 'STUDENT' && (
                 <div className="flex items-center gap-1.5">
                   <UserCheck size={13} />
-                  <span>{c.teacher_name}</span>
+                  <span>{c.teacher_names.join(', ') || '—'}</span>
                 </div>
               )}
             </div>

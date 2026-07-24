@@ -38,12 +38,12 @@ export function CourseDetailView({ courseId }: Props) {
     )
   }
 
-  const isTeacher = course.teacher.public_id === user?.public_id
+  const isTeacher = course.teachers.some((t) => t.public_id === user?.public_id)
   const canManage = isTeacher || isAdmin() || hasRole('DIRECTOR')
   const canEditContent = isTeacher || isAdmin()
-  // Reasignar el docente es potestad de admin/director, no del docente del
-  // curso: coincide con el require_roles del backend.
-  const canChangeTeacher = isAdmin() || hasRole('DIRECTOR')
+  // Agregar/quitar docentes del curso es ADMIN-only: coincide con el
+  // require_roles("ADMIN") del backend (POST/DELETE .../teachers).
+  const canManageTeachers = isAdmin()
 
   if (canManage) {
     return (
@@ -52,7 +52,7 @@ export function CourseDetailView({ courseId }: Props) {
         units={units}
         reload={reload}
         canEditContent={canEditContent}
-        canChangeTeacher={canChangeTeacher}
+        canManageTeachers={canManageTeachers}
       />
     )
   }

@@ -9,19 +9,14 @@ import type { User } from '@/lib/types'
 interface Props {
   courseId: string
   courseName: string
-  currentTeacherId: string
   onClose: () => void
-  onChanged: () => void
+  onAdded: () => void
 }
 
-export function ChangeTeacherModal({
-  courseId,
-  courseName,
-  currentTeacherId,
-  onClose,
-  onChanged,
-}: Props) {
-  const [teacherId, setTeacherId] = useState(currentTeacherId)
+// Agrega un docente al curso. La lista de candidatos ya excluye (en el
+// backend) a quienes ya están asignados — ver get_assignable_teachers_for_course.
+export function AddTeacherModal({ courseId, courseName, onClose, onAdded }: Props) {
+  const [teacherId, setTeacherId] = useState('')
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -37,14 +32,14 @@ export function ChangeTeacherModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!teacherId || teacherId === currentTeacherId) return
+    if (!teacherId) return
     setSaving(true)
     setError(null)
     try {
-      await academicService.assignCourseTeacher(courseId, teacherId)
-      onChanged()
+      await academicService.addTeacher(courseId, teacherId)
+      onAdded()
     } catch (err: any) {
-      setError(err?.detail ?? 'Error al cambiar el docente')
+      setError(err?.detail ?? 'Error al agregar el docente')
       setSaving(false)
     }
   }
@@ -53,7 +48,7 @@ export function ChangeTeacherModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Cambiar docente</h2>
+          <h2 className="text-lg font-semibold">Agregar docente</h2>
           <button
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground"
@@ -76,15 +71,20 @@ export function ChangeTeacherModal({
               disabled={loading || saving}
               required
             >
+              <option value="">Seleccionar docente…</option>
               {users.map((u) => (
                 <option key={u.public_id} value={u.public_id}>
                   {u.first_name} {u.last_name} — {u.email}
-                  {u.public_id === currentTeacherId ? ' (actual)' : ''}
                 </option>
               ))}
             </select>
             {loading && (
               <p className="mt-1 text-xs text-muted-foreground">Cargando docentes…</p>
+            )}
+            {!loading && users.length === 0 && !error && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                No hay docentes disponibles para agregar.
+              </p>
             )}
           </div>
 
@@ -97,9 +97,9 @@ export function ChangeTeacherModal({
             <Button
               type="submit"
               size="sm"
-              disabled={saving || loading || !teacherId || teacherId === currentTeacherId}
+              disabled={saving || loading || !teacherId}
             >
-              {saving ? 'Guardando…' : 'Guardar'}
+              {saving ? 'Agregando…' : 'Agregar'}
             </Button>
           </div>
         </form>

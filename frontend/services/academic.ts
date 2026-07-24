@@ -131,8 +131,16 @@ export function listAssignableTeachers(courseId: string) {
   return api.get<User[]>(`/academic/courses/${courseId}/assignable-teachers`)
 }
 
-export function assignCourseTeacher(courseId: string, teacherId: string) {
-  return api.post(`/academic/courses/${courseId}/teacher`, { teacher_id: teacherId })
+// Agrega un docente al curso (no reemplaza a los existentes — un curso puede
+// tener varios). ADMIN-only en el backend.
+export function addTeacher(courseId: string, teacherId: string) {
+  return api.post(`/academic/courses/${courseId}/teachers`, { teacher_id: teacherId })
+}
+
+// Quita un docente del curso. El backend rechaza (400) si dejaría el curso
+// sin ningún docente activo. ADMIN-only.
+export function removeTeacher(courseId: string, userId: string) {
+  return api.delete(`/academic/courses/${courseId}/teachers/${userId}`)
 }
 
 export function getCourseStudents(courseId: string) {

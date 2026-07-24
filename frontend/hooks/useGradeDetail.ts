@@ -5,7 +5,7 @@ import type { CourseDetail, GradeWithCourses, User } from '@/lib/types'
 export interface GradeCourseRow {
   public_id: string
   name: string
-  teacher: User | null
+  teachers: User[]
   studentCount: number
   is_active: boolean
 }
@@ -44,7 +44,7 @@ export function useGradeDetail(gradeId: string) {
         rows.push({
           public_id: d.public_id,
           name: d.name,
-          teacher: d.teacher,
+          teachers: d.teachers,
           studentCount: d.students.length,
           is_active: d.is_active,
         })

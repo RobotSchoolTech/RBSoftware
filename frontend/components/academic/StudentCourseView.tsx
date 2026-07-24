@@ -39,7 +39,8 @@ export function StudentCourseView({ course }: Props) {
         </button>
         <h1 className="text-2xl font-semibold">{course.name}</h1>
         <p className="text-sm text-muted-foreground">
-          Docente: {course.teacher.first_name} {course.teacher.last_name}
+          {course.teachers.length > 1 ? 'Docentes' : 'Docente'}:{' '}
+          {course.teachers.map((t) => `${t.first_name} ${t.last_name}`).join(', ') || '—'}
         </p>
       </div>
 
