@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -23,6 +24,7 @@ from app.domains.academic.repositories import (
     AssignmentRepository,
     CourseRepository,
     CourseStudentRepository,
+    CourseTeacherRepository,
     GradeDirectorRepository,
     GradeRepository,
     MaterialRepository,
@@ -32,6 +34,7 @@ from app.domains.academic.repositories import (
     SubmissionRepository,
     UnitRepository,
 )
+from app.domains.academic.models.lms_course_teacher import LmsCourseTeacher
 from app.domains.academic.schemas.composite import CourseDetail, GradeWithCourses
 from app.domains.academic.schemas.lms_assignment import (
     AssignmentCreate,
@@ -93,6 +96,10 @@ class AcademicService:
             return
         raise PermissionError("User must be admin or director of this grade")
 
+    @staticmethod
+    def _is_course_teacher(session: Session, course_id: int, user_id: int) -> bool:
+        return CourseTeacherRepository(session).is_course_teacher(course_id, user_id)
+
     def _assert_admin_or_director_or_teacher(
         self, session: Session, course: LmsCourse, user_id: int
     ) -> None:
@@ -102,7 +109,7 @@ class AcademicService:
             course.grade_id, user_id
         ):
             return
-        if course.teacher_id == user_id:
+        if self._is_course_teacher(session, course.id, user_id):
             return
         raise PermissionError(
             "User must be admin, director of this grade, or teacher of this course"
@@ -113,7 +120,7 @@ class AcademicService:
     ) -> None:
         if self._is_admin(session, user_id):
             return
-        if course.teacher_id == user_id:
+        if self._is_course_teacher(session, course.id, user_id):
             return
         raise PermissionError("User must be admin or teacher of this course")
 
@@ -165,9 +172,15 @@ class AcademicService:
         if not self._is_admin(session, requesting_user_id):
             raise PermissionError("Solo administradores pueden remover docentes")
 
+        # El docente puede dictar varios cursos co-asignado con otros; se bloquea
+        # el remove si tiene AL MENOS uno activo en este colegio, sin importar si
+        # es el único docente o uno de varios.
+        teacher_course_ids = set(
+            CourseTeacherRepository(session).list_course_ids_for_teacher(user_id)
+        )
         active_courses = [
             c for c in CourseRepository(session).list_by_school(school_id)
-            if c.teacher_id == user_id and c.is_active
+            if c.id in teacher_course_ids and c.is_active
         ]
         if active_courses:
             raise ValueError("El docente tiene cursos activos en este colegio")
@@ -441,21 +454,32 @@ class AcademicService:
 
         grade_ids = {c.grade_id for c in all_courses}
         school_ids = {c.school_id for c in all_courses}
-        t_ids = {c.teacher_id for c in all_courses}
 
         grade_repo = GradeRepository(session)
         school_repo = SchoolRepository(session)
-        user_repo = UserRepository(session)
 
         grades_map = {g.id: g for g in [grade_repo.get_by_id(gid) for gid in grade_ids] if g}
         schools_map = {s.id: s for s in [school_repo.get_by_id(sid) for sid in school_ids] if s}
-        teachers_map = {t.id: t for t in [user_repo.get_by_id(tid) for tid in t_ids] if t}
+
+        # Query agrupada única (no N+1): un curso puede tener varios docentes y
+        # get_my_courses_as_teacher devuelve TODOS los cursos activos para un
+        # ADMIN, así que resolver docentes uno a uno por curso sería N queries.
+        course_ids = [c.id for c in all_courses]
+        teacher_rows = session.exec(
+            select(LmsCourseTeacher.course_id, User)
+            .join(User, User.id == LmsCourseTeacher.user_id)
+            .where(LmsCourseTeacher.course_id.in_(course_ids))
+            .order_by(User.first_name, User.last_name)
+        ).all()
+        teachers_by_course: dict[int, list[User]] = defaultdict(list)
+        for course_id, user in teacher_rows:
+            teachers_by_course[course_id].append(user)
 
         result: list[MyCourseRead] = []
         for c in all_courses:
             grade = grades_map.get(c.grade_id)
             school = schools_map.get(c.school_id)
-            teacher = teachers_map.get(c.teacher_id)
+            course_teachers = teachers_by_course.get(c.id, [])
             result.append(
                 MyCourseRead(
                     public_id=c.public_id,
@@ -466,9 +490,9 @@ class AcademicService:
                     updated_at=c.updated_at,
                     grade_name=grade.name if grade else "",
                     school_name=school.name if school else "",
-                    teacher_name=(
-                        f"{teacher.first_name} {teacher.last_name}" if teacher else ""
-                    ),
+                    teacher_names=[
+                        f"{t.first_name} {t.last_name}" for t in course_teachers
+                    ],
                     role="TEACHER" if c.id in teacher_ids else "STUDENT",
                 )
             )
@@ -480,7 +504,7 @@ class AcademicService:
         course = CourseRepository(session).get_by_id(course_id)
         if course is None:
             raise LookupError("Course not found")
-        teacher = UserRepository(session).get_by_id(course.teacher_id)
+        teachers = CourseTeacherRepository(session).list_teachers(course.id)
         students = CourseStudentRepository(session).get_students(course.id)
         units = UnitRepository(session).list_by_course(course.id)
         return CourseDetail(
@@ -490,7 +514,7 @@ class AcademicService:
             is_active=course.is_active,
             created_at=course.created_at,
             updated_at=course.updated_at,
-            teacher=UserRead.model_validate(teacher),
+            teachers=[UserRead.model_validate(t) for t in teachers],
             students=[UserRead.model_validate(s) for s in students],
             units=[UnitRead.model_validate(u) for u in units],
         )
@@ -514,6 +538,12 @@ class AcademicService:
         course = CourseRepository(session).create(
             grade_id, grade.school_id, teacher_id, data
         )
+
+        # Invariante de creación: un curso nuevo nunca queda con teacher_id
+        # legacy poblado sin su fila puente correspondiente en
+        # lms_course_teachers.
+        if teacher_id is not None:
+            CourseTeacherRepository(session).add(course.id, teacher_id)
 
         _audit.log(
             session,
@@ -622,13 +652,14 @@ class AcademicService:
                 f"recuperar. Desactiva el curso en vez de eliminarlo."
             )
 
-        # Capturar ANTES de borrar: tras el delete el objeto queda expirado y el
-        # log se escribe después, para no dejar rastro de un borrado que falló.
+        # Capturar ANTES de borrar: tras el delete el objeto queda expirado, y
+        # el CASCADE se lleva por delante las filas de lms_course_teachers.
+        teacher_ids = CourseTeacherRepository(session).get_teacher_ids(course.id)
         payload = {
             "name": course.name,
             "grade_id": course.grade_id,
             "school_id": course.school_id,
-            "teacher_id": course.teacher_id,
+            "teacher_ids": teacher_ids,
             # Qué se llevó la cascada, para poder reconstruir el contexto.
             "cascaded": {
                 k: impact[k]
@@ -654,11 +685,10 @@ class AcademicService:
         course_id: int,
         requesting_user_id: int,
     ) -> list[UserRead]:
-        """Candidatos a docente de un curso.
-
-        Docentes del colegio + directores del colegio (la misma persona puede
-        coordinar y dictar) + el docente actual, para que el select siempre
-        muestre el valor vigente aunque su cuenta esté desactivada.
+        """Candidatos a docente de un curso: docentes del colegio + directores del
+        colegio (la misma persona puede coordinar y dictar), excluyendo a
+        quienes YA están asignados al curso (no tiene sentido "asignar" a
+        alguien que ya lo dicta).
         """
         course = CourseRepository(session).get_by_id(course_id)
         if course is None:
@@ -681,10 +711,11 @@ class AcademicService:
             if user.is_active:
                 candidates[user.id] = user
 
-        if course.teacher_id is not None and course.teacher_id not in candidates:
-            current = UserRepository(session).get_by_id(course.teacher_id)
-            if current is not None:
-                candidates[current.id] = current
+        already_assigned = set(
+            CourseTeacherRepository(session).get_teacher_ids(course.id)
+        )
+        for teacher_id in already_assigned:
+            candidates.pop(teacher_id, None)
 
         return [
             UserRead.model_validate(u).model_copy(
@@ -695,32 +726,69 @@ class AcademicService:
             )
         ]
 
-    def assign_teacher(
+    def add_teacher_to_course(
         self,
         session: Session,
         course_id: int,
         teacher_id: int,
         requesting_user_id: int,
-    ) -> LmsCourse:
+    ) -> None:
+        """Agrega un docente al curso (co-dictado). Idempotente: agregar dos
+        veces al mismo docente no duplica la fila puente. ADMIN-only — ver
+        §4.7 del spec: endurecimiento deliberado respecto al viejo
+        assign_teacher (ADMIN o DIRECTOR), porque ahora la operación modifica
+        la membresía de un recurso compartido entre varios docentes.
+        """
         course = CourseRepository(session).get_by_id(course_id)
         if course is None:
             raise LookupError("Course not found")
 
-        self._assert_admin_or_director(session, course.grade_id, requesting_user_id)
-
-        # Un director puede dictar cursos: en RobotSchool la misma persona
-        # coordina un grado y tiene curso a cargo.
-        course = CourseRepository(session).set_teacher(course, teacher_id)
+        CourseTeacherRepository(session).add(course.id, teacher_id)
 
         _audit.log(
             session,
             user_id=requesting_user_id,
-            action="academic.course.teacher_assigned",
+            action="academic.course.teacher_added",
             resource_type="lms_course",
             resource_id=str(course.id),
             payload={"teacher_id": teacher_id},
         )
-        return course
+
+    def remove_teacher_from_course(
+        self,
+        session: Session,
+        course_id: int,
+        teacher_id: int,
+        requesting_user_id: int,
+    ) -> None:
+        """Quita un docente del curso. Bloquea si dejaría el curso con cero
+        docentes activos (todo curso activo mantiene al menos un docente).
+        """
+        course = CourseRepository(session).get_by_id(course_id)
+        if course is None:
+            raise LookupError("Course not found")
+
+        teacher_repo = CourseTeacherRepository(session)
+        if not teacher_repo.is_course_teacher(course.id, teacher_id):
+            raise LookupError("El usuario no es docente de este curso")
+
+        remaining = set(teacher_repo.get_teacher_ids(course.id)) - {teacher_id}
+        if not remaining:
+            raise ValueError(
+                "No se puede quitar al último docente del curso. "
+                "Asigna otro docente antes de remover este."
+            )
+
+        teacher_repo.remove(course.id, teacher_id)
+
+        _audit.log(
+            session,
+            user_id=requesting_user_id,
+            action="academic.course.teacher_removed",
+            resource_type="lms_course",
+            resource_id=str(course.id),
+            payload={"teacher_id": teacher_id},
+        )
 
     def list_course_students(
         self, session: Session, course_id: int, user_id: int
@@ -744,7 +812,7 @@ class AcademicService:
 
         self._assert_admin_or_director_or_teacher(session, course, requesting_user_id)
 
-        if course.teacher_id == user_id:
+        if self._is_course_teacher(session, course.id, user_id):
             raise ValueError("Cannot enroll the teacher of this course as a student")
         if GradeDirectorRepository(session).is_director_of_grade(
             course.grade_id, user_id
@@ -1138,7 +1206,7 @@ class AcademicService:
         course = CourseRepository(session).get_by_id(unit.course_id)
 
         is_admin = self._is_admin(session, requesting_user_id)
-        is_teacher = course.teacher_id == requesting_user_id
+        is_teacher = self._is_course_teacher(session, course.id, requesting_user_id)
 
         if not is_admin and not is_teacher:
             if not material.is_published:
@@ -1358,7 +1426,7 @@ class AcademicService:
             assignment = AssignmentRepository(session).get_by_id(submission.assignment_id)
             unit = UnitRepository(session).get_by_id(assignment.unit_id)
             course = CourseRepository(session).get_by_id(unit.course_id)
-            if course.teacher_id != requesting_user_id:
+            if not self._is_course_teacher(session, course.id, requesting_user_id):
                 raise PermissionError("Sin acceso a esta entrega")
 
         if not submission.file_key:
@@ -1561,7 +1629,7 @@ class AcademicService:
             raise LookupError("Course not found")
 
         is_admin = self._is_admin(session, requesting_user_id)
-        is_teacher = course.teacher_id == requesting_user_id
+        is_teacher = self._is_course_teacher(session, course.id, requesting_user_id)
         is_director = GradeDirectorRepository(session).is_director_of_grade(
             course.grade_id, requesting_user_id
         )

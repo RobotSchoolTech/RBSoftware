@@ -36,7 +36,7 @@ class MyCourseRead(SQLModel):
     updated_at: datetime
     grade_name: str
     school_name: str
-    teacher_name: str
+    teacher_names: list[str] = []
     role: Literal['TEACHER', 'STUDENT']
 
 

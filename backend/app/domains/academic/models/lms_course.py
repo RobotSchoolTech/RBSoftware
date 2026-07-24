@@ -26,9 +26,10 @@ class LmsCourse(SQLModel, table=True):
     )
     name: str = Field(sa_column=Column(String(255), nullable=False))
     description: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    teacher_id: int = Field(
+    teacher_id: int | None = Field(
+        default=None,
         sa_column=Column(
-            Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+            Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
         )
     )
     is_active: bool = Field(default=True, nullable=False)

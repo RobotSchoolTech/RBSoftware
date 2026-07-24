@@ -38,7 +38,7 @@ class CourseDetail(SQLModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    teacher: UserRead
+    teachers: list[UserRead] = []
     students: list[UserRead] = []
     units: list[UnitRead] = []
 
