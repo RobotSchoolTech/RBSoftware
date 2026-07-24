@@ -499,13 +499,39 @@ class AcademicService:
         return result
 
     def get_course_detail(
-        self, session: Session, course_id: int
+        self, session: Session, course_id: int, requesting_user_id: int
     ) -> CourseDetail:
+        """Detalle del curso. Mismo criterio de acceso que get_course_content:
+        admin, docente del curso, director del grado o estudiante matriculado.
+
+        El roster (`students`) solo viaja para quien lo administra. Un estudiante
+        matriculado obtiene el curso y sus docentes, pero NO la lista de sus
+        compañeros: son menores de edad y su vista no consume ese dato.
+        """
         course = CourseRepository(session).get_by_id(course_id)
         if course is None:
             raise LookupError("Course not found")
+
+        is_admin = self._is_admin(session, requesting_user_id)
+        is_teacher = self._is_course_teacher(session, course.id, requesting_user_id)
+        is_director = GradeDirectorRepository(session).is_director_of_grade(
+            course.grade_id, requesting_user_id
+        )
+        is_student = CourseStudentRepository(session).is_enrolled(
+            course.id, requesting_user_id
+        )
+
+        if not (is_admin or is_teacher or is_director or is_student):
+            raise PermissionError(
+                "User must be admin, teacher, director, or enrolled student"
+            )
+
         teachers = CourseTeacherRepository(session).list_teachers(course.id)
-        students = CourseStudentRepository(session).get_students(course.id)
+        students = (
+            CourseStudentRepository(session).get_students(course.id)
+            if (is_admin or is_teacher or is_director)
+            else []
+        )
         units = UnitRepository(session).list_by_course(course.id)
         return CourseDetail(
             public_id=course.public_id,
@@ -1587,13 +1613,33 @@ class AcademicService:
     ) -> list[LmsCourse]:
         if self._is_admin(session, user_id):
             return CourseRepository(session).list_all_active()
+
+        course_repo = CourseRepository(session)
+
+        # Un director SÍ puede dictar: en RobotSchool la misma persona coordina
+        # un grado y tiene curso a cargo. Antes esto era un `return` temprano por
+        # los grados que dirige, así que un director co-asignado a un curso de
+        # OTRO grado no lo veía nunca en /my-courses — tenía permiso de entrar
+        # por URL directa, pero no forma de llegar. Se unen las dos fuentes.
         director_grades = GradeDirectorRepository(session).get_grades_for_director(
             user_id
         )
+        courses: list[LmsCourse] = []
         if director_grades:
             grade_ids = [g.id for g in director_grades]
-            return CourseRepository(session).list_by_grade_ids(grade_ids)
-        return CourseRepository(session).list_by_teacher(user_id)
+            courses.extend(course_repo.list_by_grade_ids(grade_ids))
+        courses.extend(course_repo.list_by_teacher(user_id))
+
+        seen: set[int] = set()
+        unique: list[LmsCourse] = []
+        for course in courses:
+            if course.id not in seen:
+                seen.add(course.id)
+                unique.append(course)
+        # Ambas fuentes vienen ordenadas por nombre; concatenarlas rompe ese
+        # orden, así que se restaura sobre el resultado unido.
+        unique.sort(key=lambda c: c.name)
+        return unique
 
     def get_my_courses_as_student(
         self, session: Session, user_id: int

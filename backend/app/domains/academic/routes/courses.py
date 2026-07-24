@@ -72,15 +72,17 @@ def my_courses(
 def get_course(
     course_id: UUID,
     session: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     course = CourseRepository(session).get_by_public_id(course_id)
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Course not found")
     try:
-        return _svc.get_course_detail(session, course.id)
+        return _svc.get_course_detail(session, course.id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
 
 
 @router.patch("/courses/{course_id}", response_model=CourseRead)
