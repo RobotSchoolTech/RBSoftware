@@ -39,7 +39,11 @@ def list_user_roles(
     return roles
 
 
-@router.post("/{user_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/{user_id}/roles/{role_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 def assign_role_to_user(
     user_id: UUID,
     role_id: UUID,
@@ -60,7 +64,11 @@ def assign_role_to_user(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-@router.delete("/{user_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{user_id}/roles/{role_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 def remove_role_from_user(
     user_id: UUID,
     role_id: UUID,

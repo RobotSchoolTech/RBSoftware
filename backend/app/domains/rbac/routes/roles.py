@@ -72,7 +72,11 @@ def list_role_permissions(
     return perms
 
 
-@router.delete("/{public_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{public_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 def delete_role(
     public_id: UUID,
     session: Session = Depends(get_session),
@@ -89,6 +93,7 @@ def delete_role(
 @router.post(
     "/{role_id}/permissions/{permission_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
 )
 def assign_permission_to_role(
     role_id: UUID,
@@ -118,6 +123,7 @@ def assign_permission_to_role(
 @router.delete(
     "/{role_id}/permissions/{permission_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
 )
 def remove_permission_from_role(
     role_id: UUID,

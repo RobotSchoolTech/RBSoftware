@@ -91,7 +91,11 @@ def login(
     return UserRead.model_validate(user).model_copy(update={"roles": role_names})
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 def logout(
     request: Request,
     response: Response,
